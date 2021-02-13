@@ -1703,7 +1703,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						}
 						if (ImGui::TableNextColumn())
 						{
-							ImGui::Image(infos.texture, ImVec2(DisplayMode_ThumbailsList_ImageHeight, DisplayMode_ThumbailsList_ImageHeight));
+							ImGui::Image(infos.textureID, ImVec2(DisplayMode_ThumbailsList_ImageHeight, DisplayMode_ThumbailsList_ImageHeight));
 						}
 
 						if (showColor)
@@ -2417,6 +2417,8 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 			prSortingField = vSortingField;
 		}
 
+		prLoadTexturesOfFiles();
+
 		prApplyFilteringOnFileList();
 	}
 
@@ -2506,6 +2508,105 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 			prSortFields(prSortingField);
 		}
 	}
+
+#ifdef USE_THUMBNAILS
+	#ifndef STB_IMAGE_IMPLEMENTATION
+	#define STB_IMAGE_IMPLEMENTATION
+	#endif // STB_IMAGE_IMPLEMENTATION
+	#include "stb/stb_image.h"
+	#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION
+	#define STB_IMAGE_RESIZE_IMPLEMENTATION
+	#endif // STB_IMAGE_RESIZE_IMPLEMENTATION
+	#include "stb/stb_image_resize.h"
+	#include <glad/glad.h> // temporary
+	void IGFD::FileDialog::prLoadTexturesOfFiles()
+	{
+		int max_conurent_thread = 2;
+		for (auto& file : prFileList)
+		{
+			if (file.type == 'f')
+			{
+				if (file.ext == ".png"
+					|| file.ext == ".bmp"
+					|| file.ext == ".tga"
+					|| file.ext == ".jpg" || file.ext == ".jpeg"
+					|| file.ext == ".gif"
+					|| file.ext == ".psd"
+					|| file.ext == ".pic" 
+					|| file.ext == ".ppm" || file.ext == ".pgm"
+					//|| file.ext == ".hdr" => format float so in few times
+					)
+				{
+					auto fpn = file.filePath + PATH_SEP + file.fileName;
+
+					int w = 0;
+					int h = 0;
+					int chans = 0;
+					auto datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb);
+					if (datas != 0 && (chans == 4 || chans == 2))
+					{
+						stbi_image_free(datas);
+						datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb_alpha);
+					}
+					if (datas)
+					{
+						file.textureDatas = datas;
+						file.textureWidth = w;
+						file.textureHeight = h;
+						file.textureChannels = chans;
+
+						// resize
+						const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
+						const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
+						const int newBufSize = newWidth * newHeight * chans;
+						auto resizedData = new uint8_t[newBufSize];
+						const int resizeRes = stbir_resize_uint8(
+							datas, w, h, w * chans,
+							resizedData, newWidth, newHeight, newWidth * file.textureChannels,
+							chans);
+
+						if (resizeRes)
+						{
+							file.textureDatas = resizedData;
+							file.textureWidth = newWidth;
+							file.textureHeight = newHeight;
+							file.textureChannels = chans;
+						}
+						
+						if (file.textureDatas)
+						{
+							GLuint textureId = 0;
+							glGenTextures(1, &textureId);
+							file.textureID = (ImTextureID)(size_t)textureId;
+							glBindTexture(GL_TEXTURE_2D, textureId);
+							glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+							GLenum format; GLenum internalformat;
+							if (file.textureChannels == 1) { format = GL_RED; internalformat = GL_RED; }
+							else if (file.textureChannels == 2) { format = GL_RG; internalformat = GL_RG; }
+							else if (file.textureChannels == 3) { format = GL_RGB; internalformat = GL_RGB; }
+							else if (file.textureChannels == 4) { format = GL_RGBA;	internalformat = GL_RGBA; }
+							glTexImage2D(GL_TEXTURE_2D, 0, internalformat, (GLsizei)file.textureWidth, (GLsizei)file.textureHeight, 0, format, GL_UNSIGNED_BYTE, file.textureDatas);
+							glGenerateMipmap(GL_TEXTURE_2D);
+							glFinish();
+							glBindTexture(GL_TEXTURE_2D, 0);
+
+							delete[] file.textureDatas;
+							file.textureDatas = nullptr;
+						}
+
+						//stbi_image_free(datas);
+					}
+				}
+			}
+		}
+	}
+
+
+#endif // USE_THUMBNAILS
 
 	void IGFD::FileDialog::prSetCurrentDir(const std::string& vPath)
 	{

@@ -561,7 +561,11 @@ namespace IGFD
 			std::string formatedFileSize;
 			std::string fileModifDate;
 #ifdef USE_THUMBNAILS
-			ImTextureID texture = 0; // 
+			ImTextureID textureID = 0; // 
+			uint8_t* textureDatas;
+			int textureWidth = 0;
+			int textureHeight = 0;
+			int textureChannels = 0;
 #endif // USE_THUMBNAILS
 		};
 
@@ -822,21 +826,21 @@ namespace IGFD
 
 	protected: 
 		// dialog parts
-		virtual void prDrawHeader();									// draw header part of the dialog (bookmark btn, dir creation, path composer, search bar)
-		virtual void prDrawContent();									// draw content part of the dialog (bookmark pane, file list, side pane)
-		virtual bool prDrawFooter();									// draw footer part of the dialog (file field, fitler combobox, ok/cancel btn's)
+		virtual void prDrawHeader();								// draw header part of the dialog (bookmark btn, dir creation, path composer, search bar)
+		virtual void prDrawContent();								// draw content part of the dialog (bookmark pane, file list, side pane)
+		virtual bool prDrawFooter();								// draw footer part of the dialog (file field, fitler combobox, ok/cancel btn's)
 
 		// widgets components
 		virtual void prDrawDirectoryCreation();						// draw directory creation widget
 		virtual void prDrawPathComposer();							// draw path composer widget
 #ifdef USE_THUMBNAILS
-		virtual void prDrawDisplayModeToolBar();						// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
+		virtual void prDrawDisplayModeToolBar();					// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
 #endif // USE_THUMBNAILS
 		virtual void prDrawSearchBar();								// draw search bar
 		virtual void prDrawFileListView(ImVec2 vSize);				// draw file list viexw
 #ifdef USE_THUMBNAILS
-		virtual void prDrawThumbnailsListView(ImVec2 vSize);			// draw file list view with small thumbnails on the same line
-		virtual void prDrawSmallThumbnailsView(ImVec2 vSize);			// draw a grid of small thumbnails
+		virtual void prDrawThumbnailsListView(ImVec2 vSize);		// draw file list view with small thumbnails on the same line
+		virtual void prDrawSmallThumbnailsView(ImVec2 vSize);		// draw a grid of small thumbnails
 		virtual void prDrawBigThumbnailsView(ImVec2 vSize);			// draw a grid of bigs thumbnails
 #endif // USE_THUMBNAILS
 		virtual void prDrawSidePane(float vHeight);					// draw side pane
@@ -845,33 +849,34 @@ namespace IGFD
 #endif // USE_BOOKMARK
 
 		// others
-		bool prSelectableItem(int vidx, const FileInfoStruct& vInfos, bool vSelected, const char* vFmt, ...);					// selectable item for table
-		void prResetEvents();																									// reset events (path, drives, continue)
-		void prSetDefaultFileName(const std::string& vFileName);																// set default file name
-		bool prSelectDirectory(const FileInfoStruct& vInfos);																	// enter directory 
-		void prSelectFileName(const FileInfoStruct& vInfos);																	// select filename
+		bool prSelectableItem(int vidx, const FileInfoStruct& vInfos, bool vSelected, const char* vFmt, ...);				// selectable item for table
+		void prResetEvents();																								// reset events (path, drives, continue)
+		void prSetDefaultFileName(const std::string& vFileName);															// set default file name
+		bool prSelectDirectory(const FileInfoStruct& vInfos);																// enter directory 
+		void prSelectFileName(const FileInfoStruct& vInfos);																// select filename
 		void prRemoveFileNameInSelection(const std::string& vFileName);														// selection : remove a file name
-		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);							// selection : add a file name
-		void prSetPath(const std::string& vPath);																				// set the path of the dialog, will launch the directory scan for populate the file listview
+		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);						// selection : add a file name
+		void prSetPath(const std::string& vPath);																			// set the path of the dialog, will launch the directory scan for populate the file listview
 		void prCompleteFileInfos(FileInfoStruct *vFileInfoStruct);															// set time and date infos of a file (detail view mode)
-		void prSortFields(SortingFieldEnum vSortingField = SortingFieldEnum::FIELD_NONE, 	bool vCanChangeOrder = false);		// will sort a column
-		void prScanDir(const std::string& vPath);																				// scan the directory for retrieve the file list
+		void prSortFields(SortingFieldEnum vSortingField = SortingFieldEnum::FIELD_NONE, 	bool vCanChangeOrder = false);	// will sort a column
+		void prScanDir(const std::string& vPath);																			// scan the directory for retrieve the file list
+		void prLoadTexturesOfFiles();																						// will load (threaded) the texture of each files and will generate a thumbnail ready to display
 		void prSetCurrentDir(const std::string& vPath);																		// define current directory for scan
 		bool prCreateDir(const std::string& vPath);																			// create a directory on the file system
 		std::string prComposeNewPath(std::vector<std::string>::iterator vIter);												// compose a path from the compose path widget
 		void prGetDrives();																									// list drives on windows platform
 		void prParseFilters(const char* vFilters);																			// parse filter syntax, detect and parse filter collection
-		void prSetSelectedFilterWithExt(const std::string& vFilter);															// select filter
-		static std::string prOptimizeFilenameForSearchOperations(std::string vFileName);										// easier the search by lower case all filenames
+		void prSetSelectedFilterWithExt(const std::string& vFilter);														// select filter
+		static std::string prOptimizeFilenameForSearchOperations(std::string vFileName);									// easier the search by lower case all filenames
 	    void prApplyFilteringOnFileList();																					// filter the file list accroding to the searh tags
 		bool prConfirm_Or_OpenOverWriteFileDialog_IfNeeded(bool vLastAction, ImGuiWindowFlags vFlags);						// treatment of the result, start the confirm to overwrite dialog if needed (if defined with flag)
-		bool prIsFileExist(const std::string& vFile);																			// is file exist
+		bool prIsFileExist(const std::string& vFile);																		// is file exist
 
 #ifdef USE_EXPLORATION_BY_KEYS
 		// file localization by input chat // widget flashing
 		void prLocateByInputKey();																							// select a file line in listview according to char key
 		bool prLocateItem_Loop(ImWchar vC);																					// restrat for start of list view if not found a corresponding file
-		void prExploreWithkeys();																								// select file/directory line in listview accroding to up/down enter/backspace keys
+		void prExploreWithkeys();																							// select file/directory line in listview accroding to up/down enter/backspace keys
 		static bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
 			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
 			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
