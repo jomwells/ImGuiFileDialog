@@ -2572,7 +2572,8 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 							file.textureHeight = newHeight;
 							file.textureChannels = chans;
 						}
-						
+						stbi_image_free(datas);
+
 						if (file.textureDatas)
 						{
 							GLuint textureId = 0;
@@ -2597,8 +2598,6 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 							delete[] file.textureDatas;
 							file.textureDatas = nullptr;
 						}
-
-						//stbi_image_free(datas);
 					}
 				}
 			}
