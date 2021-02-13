@@ -1237,7 +1237,11 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		}
 
 		// Cancel Button
-		if (IMGUI_BUTTON(cancelButtonString))
+		if (IMGUI_BUTTON(cancelButtonString)
+#ifdef USE_DIALOG_EXIT_WITH_KEY
+			|| ImGui::IsKeyReleased(IGFD_EXIT_KEY)
+#endif
+			)
 		{
 			prIsOk = false;
 			res = true;

@@ -28,6 +28,10 @@
 // BackSpace for comming back to the last directory
 //#define IGFD_KEY_BACKSPACE GLFW_KEY_BACKSPACE
 
+// by ex you can quit the dialog by pressing the key excape
+//#define USE_DIALOG_EXIT_WITH_KEY
+//#define IGFD_EXIT_KEY GLFW_KEY_ESCAPE
+
 // widget
 // filter combobox width
 //#define FILTER_COMBO_WIDTH 120.0f
