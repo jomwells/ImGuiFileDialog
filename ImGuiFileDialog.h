@@ -560,6 +560,9 @@ namespace IGFD
 			size_t fileSize = 0; // for sorting operations
 			std::string formatedFileSize;
 			std::string fileModifDate;
+#ifdef USE_THUMBNAILS
+			ImTextureID texture = 0; // 
+#endif // USE_THUMBNAILS
 		};
 
 		struct FilterInfosStruct
@@ -576,35 +579,45 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////
 
 	private:
-		std::vector<FileInfoStruct> m_FileList;
-        std::vector<FileInfoStruct> m_FilteredFileList;
-        std::unordered_map<std::string, FileExtentionInfosStruct> m_FileExtentionInfos;
-		std::string m_CurrentPath;
-		std::vector<std::string> m_CurrentPath_Decomposition;
-		std::set<std::string> m_SelectedFileNames;
-		std::string m_Name;
-		bool m_ShowDialog = false;
-		bool m_ShowDrives = false;
-		std::string m_LastSelectedFileName; // for shift multi selectio
-		std::vector<FilterInfosStruct> m_Filters;
-		FilterInfosStruct m_SelectedFilter;
-		bool m_InputPathActivated = false; // show input for path edition
-        ImGuiListClipper m_FileListClipper;
-		ImVec2 m_DialogCenterPos = ImVec2(0, 0); // center pos for display the confirm overwrite dialog
-		int m_LastImGuiFrameCount = 0; // to be sure than only one dialog displayed per frame
-		float m_FooterHeight = 0.0f;
-		bool m_DrivesClicked = false; // events
-		bool m_PathClicked = false;// events
-		bool m_CanWeContinue = true;// events
-		bool m_OkResultToConfirm = false; // to confim if ok for OverWrite
-		bool m_IsOk = false;								
-		bool m_CreateDirectoryMode = false;					// for create directory mode
-		std::string m_HeaderFileName;						// detail view column file
-		std::string m_HeaderFileType;						// detail view column type
-		std::string m_HeaderFileSize;						// detail view column size
-		std::string m_HeaderFileDate;						// detail view column date + time
-		bool m_SortingDirection[4] = { true, true, true, true };	// detail view // true => Descending, false => Ascending
-		SortingFieldEnum m_SortingField = SortingFieldEnum::FIELD_FILENAME;  // detail view sorting column
+#ifdef USE_THUMBNAILS
+		enum DisplayModeEnum
+		{
+			DISPLAY_MODE_FILE_LIST = 0,
+			DISPLAY_MODE_THUMBAILS_LIST,
+			DISPLAY_MODE_SMALL_THUMBAILS,
+			DISPLAY_MODE_BIG_THUMBAILS,
+			DISPLAY_MODE_Count
+		} prDisplayMode = DisplayModeEnum::DISPLAY_MODE_FILE_LIST;
+#endif // USE_THUMBNAILS
+		std::vector<FileInfoStruct> prFileList;
+        std::vector<FileInfoStruct> prFilteredFileList;
+        std::unordered_map<std::string, FileExtentionInfosStruct> prFileExtentionInfos;
+		std::string prCurrentPath;
+		std::vector<std::string> prCurrentPath_Decomposition;
+		std::set<std::string> prSelectedFileNames;
+		std::string prName;
+		bool prShowDialog = false;
+		bool prShowDrives = false;
+		std::string prLastSelectedFileName; // for shift multi selection
+		std::vector<FilterInfosStruct> prFilters;
+		FilterInfosStruct prSelectedFilter;
+		bool prInputPathActivated = false; // show input for path edition
+        ImGuiListClipper prFileListClipper;
+		ImVec2 prDialogCenterPos = ImVec2(0, 0); // center pos for display the confirm overwrite dialog
+		int prLastImGuiFrameCount = 0; // to be sure than only one dialog displayed per frame
+		float prFooterHeight = 0.0f;
+		bool prDrivesClicked = false; // events
+		bool prPathClicked = false;// events
+		bool prCanWeContinue = true;// events
+		bool prOkResultToConfirm = false; // to confim if ok for OverWrite
+		bool prIsOk = false;								
+		bool prCreateDirectoryMode = false;					// for create directory mode
+		std::string prHeaderFileName;						// detail view column file
+		std::string prHeaderFileType;						// detail view column type
+		std::string prHeaderFileSize;						// detail view column size
+		std::string prHeaderFileDate;						// detail view column date + time
+		bool prSortingDirection[4] = { true, true, true, true };	// detail view // true => Descending, false => Ascending
+		SortingFieldEnum prSortingField = SortingFieldEnum::FIELD_FILENAME;  // detail view sorting column
 
 		std::string dlg_key;
 		std::string dlg_title;
@@ -621,19 +634,19 @@ namespace IGFD
 		bool dlg_modal = false;
 
 #ifdef USE_EXPLORATION_BY_KEYS
-		size_t m_FlashedItem = 0;							// flash when select by char
-		float m_FlashAlpha = 0.0f;							// flash when select by char
-		float m_FlashAlphaAttenInSecs = 1.0f;				// fps display dependant
-		size_t m_LocateFileByInputChar_lastFileIdx = 0;
-		ImWchar m_LocateFileByInputChar_lastChar = 0;
-		int m_LocateFileByInputChar_InputQueueCharactersSize = 0;
-		bool m_LocateFileByInputChar_lastFound = false;
+		size_t prFlashedItem = 0;							// flash when select by char
+		float prFlashAlpha = 0.0f;							// flash when select by char
+		float prFlashAlphaAttenInSecs = 1.0f;				// fps display dependant
+		size_t prLocateFileByInputChar_lastFileIdx = 0;
+		ImWchar prLocateFileByInputChar_lastChar = 0;
+		int prLocateFileByInputChar_InputQueueCharactersSize = 0;
+		bool prLocateFileByInputChar_lastFound = false;
 #endif // USE_EXPLORATION_BY_KEYS
 #ifdef USE_BOOKMARK
-		float m_BookmarkWidth = 200.0f;
-        ImGuiListClipper m_BookmarkClipper;
-		std::vector<BookmarkStruct> m_Bookmarks;
-		bool m_BookmarkPaneShown = false;
+		float prBookmarkWidth = 200.0f;
+        ImGuiListClipper prBookmarkClipper;
+		std::vector<BookmarkStruct> prBookmarks;
+		bool prBookmarkPaneShown = false;
 #endif // USE_BOOKMARK
 
 	///////////////////////////////////////////////////////////////////////////////////////
@@ -641,16 +654,16 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////
 
 	public:
-		char InputPathBuffer[MAX_PATH_BUFFER_SIZE] = "";
-		char FileNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-		char DirectoryNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-		char SearchBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-		char VariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		char puInputPathBuffer[MAX_PATH_BUFFER_SIZE] = "";
+		char puFileNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		char puDirectoryNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		char puSearchBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		char puVariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
 
 #ifdef USE_BOOKMARK
-		char BookmarkEditBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		char puBookmarkEditBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
 #endif // USE_BOOKMARK
-		bool m_AnyWindowsHovered = false;					// not remember why haha :) todo : to check if we can remove
+		bool puAnyWindowsHovered = false;					// not remember why haha :) todo : to check if we can remove
 
 	///////////////////////////////////////////////////////////////////////////////////////
 	/// PUBLIC METHODS/////////////////////////////////////////////////////////////////////
@@ -809,18 +822,26 @@ namespace IGFD
 
 	protected: 
 		// dialog parts
-		virtual void DrawHeader();									// draw header part of the dialog (bookmark btn, dir creation, path composer, search bar)
-		virtual void DrawContent();									// draw content part of the dialog (bookmark pane, file list, side pane)
-		virtual bool DrawFooter();									// draw footer part of the dialog (file field, fitler combobox, ok/cancel btn's)
+		virtual void prDrawHeader();									// draw header part of the dialog (bookmark btn, dir creation, path composer, search bar)
+		virtual void prDrawContent();									// draw content part of the dialog (bookmark pane, file list, side pane)
+		virtual bool prDrawFooter();									// draw footer part of the dialog (file field, fitler combobox, ok/cancel btn's)
 
 		// widgets components
-		virtual void DrawDirectoryCreation();						// draw directory creation widget
-		virtual void DrawPathComposer();							// draw path composer widget
-		virtual void DrawSearchBar();								// draw search bar
-		virtual void DrawFileListView(ImVec2 vSize);				// draw file list viexw
-		virtual void DrawSidePane(float vHeight);					// draw side pane
+		virtual void prDrawDirectoryCreation();						// draw directory creation widget
+		virtual void prDrawPathComposer();							// draw path composer widget
+#ifdef USE_THUMBNAILS
+		virtual void prDrawDisplayModeToolBar();						// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
+#endif // USE_THUMBNAILS
+		virtual void prDrawSearchBar();								// draw search bar
+		virtual void prDrawFileListView(ImVec2 vSize);				// draw file list viexw
+#ifdef USE_THUMBNAILS
+		virtual void prDrawThumbnailsListView(ImVec2 vSize);			// draw file list view with small thumbnails on the same line
+		virtual void prDrawSmallThumbnailsView(ImVec2 vSize);			// draw a grid of small thumbnails
+		virtual void prDrawBigThumbnailsView(ImVec2 vSize);			// draw a grid of bigs thumbnails
+#endif // USE_THUMBNAILS
+		virtual void prDrawSidePane(float vHeight);					// draw side pane
 #ifdef USE_BOOKMARK
-		virtual void DrawBookMark();								// draw bookmark button
+		virtual void prDrawBookMark();								// draw bookmark button
 #endif // USE_BOOKMARK
 
 		// others
@@ -856,11 +877,11 @@ namespace IGFD
 			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
 		void StartFlashItem(size_t vIdx);																					// define than an item must be flashed
 		bool BeginFlashItem(size_t vIdx);																					// start the flashing of a line in lsit view
-		void EndFlashItem();																								// end the fleshing accrdoin to var m_FlashAlphaAttenInSecs
+		void EndFlashItem();																								// end the fleshing accrdoin to var prFlashAlphaAttenInSecs
 #endif // USE_EXPLORATION_BY_KEYS
 
 #ifdef USE_BOOKMARK
-		void DrawBookmarkPane(ImVec2 vSize);																				// draw bookmark pane
+		void prDrawBookmarkPane(ImVec2 vSize);																				// draw bookmark pane
 #endif // USE_BOOKMARK
 	};
 }

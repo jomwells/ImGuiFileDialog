@@ -5,6 +5,17 @@
 //#define MAX_FILE_DIALOG_NAME_BUFFER 1024
 //#define MAX_PATH_BUFFER_SIZE 1024
 
+//#define USE_THUMBNAILS
+//#define IMGUI_RADIO_BUTTON RadioButton
+//#define DisplayMode_FilesList_ButtonString "FL"
+//#define DisplayMode_FilesList_ButtonHelp "File List"
+//#define DisplayMode_ThumbailsList_ButtonString "TL"
+//#define DisplayMode_ThumbailsList_ButtonHelp "Thumbnails List"
+//#define DisplayMode_ThumbailsSmall_ButtonString "ST"
+//#define DisplayMode_ThumbailsSmall_ButtonHelp "Small Thumbnails"
+//#define DisplayMode_ThumbailsBig_ButtonString "BT"
+//#define DisplayMode_ThumbailsBig_ButtonHelp "Big Thumbnails"
+
 //#define USE_EXPLORATION_BY_KEYS
 // this mapping by default is for GLFW but you can use another
 //#include <GLFW/glfw3.h> 
