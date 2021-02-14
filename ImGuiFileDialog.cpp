@@ -2512,6 +2512,7 @@ static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 	void IGFD::FileDialog::prClearFileList()
 	{
 		prFilteredFileList.clear();
+#ifdef USE_THUMBNAILS
 		for (auto file : prFileList)
 		{
 			if (file.use_count())
@@ -2525,6 +2526,7 @@ static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 				}
 			}
 		}
+#endif
 		prFileList.clear();
 	}
 
@@ -2610,8 +2612,9 @@ static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 
 				free(files);
 			}
-
+#ifdef USE_THUMBNAILS
 			prStartThumbnailGeneration();
+#endif
 			prSortFields(prSortingField);
 		}
 	}
@@ -3377,29 +3380,42 @@ static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 					}
 					if (datas)
 					{
-						// resize
-						const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
-						const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
-						const int newBufSize = newWidth * newHeight * chans;
-						auto resizedData = new uint8_t[newBufSize];
-						const int resizeRes = stbir_resize_uint8(
-							datas, w, h, w * chans,
-							resizedData, newWidth, newHeight, newWidth * file->thumbnailInfo.textureChannels,
-							chans);
-
-						stbi_image_free(datas);
-
-						if (resizeRes)
+						if (w && h && chans)
 						{
-							file->thumbnailInfo.textureDatas = resizedData;
-							file->thumbnailInfo.textureWidth = newWidth;
-							file->thumbnailInfo.textureHeight = newHeight;
-							file->thumbnailInfo.textureChannels = chans;
+							// resize
+							const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
+							const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
+							const int newBufSize = newWidth * newHeight * chans;
+							auto resizedData = new uint8_t[newBufSize];
+							const int resizeRes = stbir_resize_uint8(
+								datas, w, h, w * chans,
+								resizedData, newWidth, newHeight, newWidth * chans,
+								chans);
 
-							// we set that at least, because will launch the gpu creation of the texture in the main thread
-							file->thumbnailInfo.isReadyToUpload = true;
+							if (resizeRes)
+							{
+								file->thumbnailInfo.textureDatas = resizedData;
+								file->thumbnailInfo.textureWidth = newWidth;
+								file->thumbnailInfo.textureHeight = newHeight;
+								file->thumbnailInfo.textureChannels = chans;
+
+								// we set that at least, because will launch the gpu creation of the texture in the main thread
+								file->thumbnailInfo.isReadyToUpload = true;
+							}
+						}
+						else
+						{
+							printf("image loading fail : w:%i h:%i c:%i\n", w, h, chans);
+#ifdef _MSC_VER
+							if (IsDebuggerPresent())
+							{
+								__debugbreak;
+							}
+#endif
 						}
 					}
+
+					stbi_image_free(datas);
 				}
 			}
 
@@ -3453,7 +3469,19 @@ static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 
 	void IGFD::FileDialog::prFinalizeThumbnailGeneration()
 	{
-		
+		for (auto file : prFileList)
+		{
+			if (!prIsWorking)
+				break;
+
+			if (!file.use_count())
+				continue;
+
+			if (file->thumbnailInfo.textureDatas)
+			{
+				delete[] file->thumbnailInfo.textureDatas;
+			}
+		}
 	}
 
 #endif

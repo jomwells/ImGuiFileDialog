@@ -539,9 +539,10 @@ namespace IGFD
 
 	typedef void* UserDatas;
 	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;	// side pane function binding
+#ifdef USE_THUMBNAILS
 	typedef std::function<void(IGFD_Thumbnail_Info*)> CreateTextureFun;	// texture 2d creation function binding
 	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyTextureFun;			// texture 2d destroy function binding
-
+#endif
 	class FileDialog
 	{
 	///////////////////////////////////////////////////////////////////////////////////////
