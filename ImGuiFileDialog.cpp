@@ -31,8 +31,23 @@ SOFTWARE.
 
 #include "imgui.h"
 
+#ifdef USE_THUMBNAILS
+
+#ifndef STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#endif // STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
+#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#endif // STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb/stb_image_resize.h"
+
+#endif // USE_THUMBNAILS
+
 #include <float.h>
 #include <string.h> // stricmp / strcasecmp
+#include <stdarg.h> // variadic
 #include <sstream>
 #include <iomanip>
 #include <time.h>
@@ -232,6 +247,8 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 #ifndef DisplayMode_ThumbailsList_ImageHeight 
 #define DisplayMode_ThumbailsList_ImageHeight 50.0f
 #endif // DisplayMode_ThumbailsList_ImageHeight
+static IGFD::CreateTextureFun sCreateTextureFun = nullptr;
+static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
 #endif  // USE_THUMBNAILS
 
 #ifdef USE_BOOKMARK
@@ -459,10 +476,23 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				if (!res) {
 					std::cout << "Error creating directory " << name << std::endl;
 				}
+			}
 		}
-	}
 
 		return res;
+	}
+
+	void inVariadicProgressBar(float fraction, const ImVec2& size_arg, const char* fmt, ...)
+	{
+		va_list args;
+		va_start(args, fmt);
+		char TempBuffer[512];
+		const int w = vsnprintf(TempBuffer, 511, fmt, args);
+		va_end(args);
+		if (w)
+		{
+			ImGui::ProgressBar(fraction, size_arg, TempBuffer);
+		}
 	}
 
 	struct PathStruct
@@ -508,6 +538,12 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				}
 				res.ext = pfn.substr(lastPoint + 1);
 				inReplaceString(res.name, "." + res.ext, "");
+			}
+
+			if (!res.isOk)
+			{
+				res.name = pfn;
+				res.isOk = true;
 			}
 		}
 
@@ -1017,7 +1053,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 			std::string name = dlg_title + "##" + dlg_key;
 			if (prName != name)
 			{
-				prFileList.clear();
+				prClearFileList();
 				prCurrentPath_Decomposition.clear();
 			}
 
@@ -1391,6 +1427,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 			prDisplayMode = DisplayModeEnum::DISPLAY_MODE_BIG_THUMBAILS;
 		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsBig_ButtonHelp);
 		ImGui::SameLine();
+		prDrawThumbnailGenerationProgress();
 	}
 #endif // USE_THUMBNAILS
 
@@ -1488,25 +1525,27 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 					{
 						if (i < 0) continue;
 
-						const FileInfoStruct& infos = prFilteredFileList[i];
+						auto infos = prFilteredFileList[i];
+						if (!infos.use_count())
+							continue;
 
 						ImVec4 c;
 						std::string icon;
-						bool showColor = GetExtentionInfos(infos.ext, &c, &icon);
+						bool showColor = GetExtentionInfos(infos->fileExt, &c, &icon);
 						if (showColor)
 							ImGui::PushStyleColor(ImGuiCol_Text, c);
 
-						std::string str = " " + infos.fileName;
-						if (infos.type == 'd') str = dirEntryString + str;
-						else if (infos.type == 'l') str = linkEntryString + str;
-						else if (infos.type == 'f')
+						std::string str = " " + infos->fileName;
+						if (infos->fileType == 'd') str = dirEntryString + str;
+						else if (infos->fileType == 'l') str = linkEntryString + str;
+						else if (infos->fileType == 'f')
 						{
 							if (showColor && !icon.empty())
 								str = icon + str;
 							else
 								str = fileEntryString + str;
 						}
-						bool selected = (prSelectedFileNames.find(infos.fileName) != prSelectedFileNames.end()); // found
+						bool selected = (prSelectedFileNames.find(infos->fileName) != prSelectedFileNames.end()); // found
 
 						ImGui::TableNextRow();
 
@@ -1518,13 +1557,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						}
 						if (ImGui::TableNextColumn()) // file type
 						{
-							ImGui::Text("%s", infos.ext.c_str());
+							ImGui::Text("%s", infos->fileExt.c_str());
 						}
 						if (ImGui::TableNextColumn()) // file size
 						{
-							if (infos.type != 'd')
+							if (infos->fileType != 'd')
 							{
-								ImGui::Text("%s ", infos.formatedFileSize.c_str());
+								ImGui::Text("%s ", infos->formatedFileSize.c_str());
 							}
 							else
 							{
@@ -1533,7 +1572,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						}
 						if (ImGui::TableNextColumn()) // file date + time
 						{
-							ImGui::Text("%s", infos.fileModifDate.c_str());
+							ImGui::Text("%s", infos->fileModifDate.c_str());
 						}
 
 						if (showColor)
@@ -1654,25 +1693,27 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 					{
 						if (i < 0) continue;
 
-						const FileInfoStruct& infos = prFilteredFileList[i];
+						auto infos = prFilteredFileList[i];
+						if (!infos.use_count())
+							continue;
 
 						ImVec4 c;
 						std::string icon;
-						bool showColor = GetExtentionInfos(infos.ext, &c, &icon);
+						bool showColor = GetExtentionInfos(infos->fileExt, &c, &icon);
 						if (showColor)
 							ImGui::PushStyleColor(ImGuiCol_Text, c);
 
-						std::string str = " " + infos.fileName;
-						if (infos.type == 'd') str = dirEntryString + str;
-						else if (infos.type == 'l') str = linkEntryString + str;
-						else if (infos.type == 'f')
+						std::string str = " " + infos->fileName;
+						if (infos->fileType == 'd') str = dirEntryString + str;
+						else if (infos->fileType == 'l') str = linkEntryString + str;
+						else if (infos->fileType == 'f')
 						{
 							if (showColor && !icon.empty())
 								str = icon + str;
 							else
 								str = fileEntryString + str;
 						}
-						bool selected = (prSelectedFileNames.find(infos.fileName) != prSelectedFileNames.end()); // found
+						bool selected = (prSelectedFileNames.find(infos->fileName) != prSelectedFileNames.end()); // found
 
 						ImGui::TableNextRow();
 
@@ -1684,13 +1725,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						}
 						if (ImGui::TableNextColumn()) // file type
 						{
-							ImGui::Text("%s", infos.ext.c_str());
+							ImGui::Text("%s", infos->fileExt.c_str());
 						}
 						if (ImGui::TableNextColumn()) // file size
 						{
-							if (infos.type != 'd')
+							if (infos->fileType != 'd')
 							{
-								ImGui::Text("%s ", infos.formatedFileSize.c_str());
+								ImGui::Text("%s ", infos->formatedFileSize.c_str());
 							}
 							else
 							{
@@ -1699,11 +1740,23 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						}
 						if (ImGui::TableNextColumn()) // file date + time
 						{
-							ImGui::Text("%s", infos.fileModifDate.c_str());
+							ImGui::Text("%s", infos->fileModifDate.c_str());
 						}
 						if (ImGui::TableNextColumn())
 						{
-							ImGui::Image(infos.textureID, ImVec2(DisplayMode_ThumbailsList_ImageHeight, DisplayMode_ThumbailsList_ImageHeight));
+							if (infos->thumbnailInfo.isReadyToDisplay)
+							{
+								ImGui::Image((ImTextureID)infos->thumbnailInfo.textureID,
+									ImVec2(DisplayMode_ThumbailsList_ImageHeight, 
+										DisplayMode_ThumbailsList_ImageHeight));
+							}
+							else if (infos->thumbnailInfo.isReadyToUpload)
+							{
+								if (prCreateTextureFun)
+								{
+									prCreateTextureFun(&infos->thumbnailInfo);
+								}
+							}
 						}
 
 						if (showColor)
@@ -1763,8 +1816,11 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 	}
 #endif // USE_THUMBNAILS
 
-	bool IGFD::FileDialog::prSelectableItem(int vidx, const FileInfoStruct& vInfos, bool vSelected, const char* vFmt, ...)
+	bool IGFD::FileDialog::prSelectableItem(int vidx, std::shared_ptr<FileInfos> vInfos, bool vSelected, const char* vFmt, ...)
 	{
+		if (!vInfos.use_count())
+			return false;
+
 		static ImGuiSelectableFlags selectableFlags = ImGuiSelectableFlags_AllowDoubleClick | 
 			ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_SpanAvailWidth;
 
@@ -1791,7 +1847,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 #endif // USE_EXPLORATION_BY_KEYS
 		if (res)
 		{
-			if (vInfos.type == 'd')
+			if (vInfos->fileType == 'd')
 			{
 				if (ImGui::IsMouseDoubleClicked(0)) // 0 -> left mouse button double click
 				{
@@ -2000,11 +2056,14 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		inSetBuffer(puFileNameBuffer, MAX_FILE_DIALOG_NAME_BUFFER, vFileName);
 	}
 
-	bool IGFD::FileDialog::prSelectDirectory(const FileInfoStruct& vInfos)
+	bool IGFD::FileDialog::prSelectDirectory(std::shared_ptr<FileInfos> vInfos)
 	{
+		if (!vInfos.use_count())
+			return false;
+
 		bool pathClick = false;
 
-		if (vInfos.fileName == "..")
+		if (vInfos->fileName == "..")
 		{
 			if (prCurrentPath_Decomposition.size() > 1)
 			{
@@ -2018,23 +2077,23 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 
 			if (prShowDrives)
 			{
-				newPath = vInfos.fileName + PATH_SEP;
+				newPath = vInfos->fileName + PATH_SEP;
 			}
 			else
 			{
 #ifdef __linux__
 				if (s_fs_root == prCurrentPath)
-					newPath = prCurrentPath + vInfos.fileName;
+					newPath = prCurrentPath + vInfos->fileName;
 				else
 #endif // __minux__
-					newPath = prCurrentPath + PATH_SEP + vInfos.fileName;
+					newPath = prCurrentPath + PATH_SEP + vInfos->fileName;
 			}
 
 			if (inIsDirectoryExist(newPath))
 			{
 				if (prShowDrives)
 				{
-					prCurrentPath = vInfos.fileName;
+					prCurrentPath = vInfos->fileName;
 					s_fs_root = prCurrentPath;
 				}
 				else
@@ -2048,32 +2107,35 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		return pathClick;
 	}
 
-	void IGFD::FileDialog::prSelectFileName(const FileInfoStruct& vInfos)
+	void IGFD::FileDialog::prSelectFileName(std::shared_ptr<FileInfos> vInfos)
 	{
+		if (!vInfos.use_count())
+			return;
+
 		if (ImGui::GetIO().KeyCtrl)
 		{
 			if (dlg_countSelectionMax == 0) // infinite selection
 			{
-				if (prSelectedFileNames.find(vInfos.fileName) == prSelectedFileNames.end()) // not found +> add
+				if (prSelectedFileNames.find(vInfos->fileName) == prSelectedFileNames.end()) // not found +> add
 				{
-					prAddFileNameInSelection(vInfos.fileName, true);
+					prAddFileNameInSelection(vInfos->fileName, true);
 				}
 				else // found +> remove
 				{
-					prRemoveFileNameInSelection(vInfos.fileName);
+					prRemoveFileNameInSelection(vInfos->fileName);
 				}
 			}
 			else // selection limited by size
 			{
 				if (prSelectedFileNames.size() < dlg_countSelectionMax)
 				{
-					if (prSelectedFileNames.find(vInfos.fileName) == prSelectedFileNames.end()) // not found +> add
+					if (prSelectedFileNames.find(vInfos->fileName) == prSelectedFileNames.end()) // not found +> add
 					{
-						prAddFileNameInSelection(vInfos.fileName, true);
+						prAddFileNameInSelection(vInfos->fileName, true);
 					}
 					else // found +> remove
 					{
-						prRemoveFileNameInSelection(vInfos.fileName);
+						prRemoveFileNameInSelection(vInfos->fileName);
 					}
 				}
 			}
@@ -2085,17 +2147,18 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prSelectedFileNames.clear();
 				// we will iterate filelist and get the last selection after the start selection
 				bool startMultiSelection = false;
-				std::string fileNameToSelect = vInfos.fileName;
+				std::string fileNameToSelect = vInfos->fileName;
 				std::string savedLastSelectedFileName; // for invert selection mode
-				for (auto& it : prFileList)
+				for (auto file : prFileList)
 				{
-					const FileInfoStruct& infos = it;
+					if (!file.use_count())
+						continue;
 
 					bool canTake = true;
-					if (!searchTag.empty() && infos.fileName.find(searchTag) == std::string::npos) canTake = false;
+					if (!searchTag.empty() && file->fileName.find(searchTag) == std::string::npos) canTake = false;
 					if (canTake) // if not filtered, we will take files who are filtered by the dialog
 					{
-						if (infos.fileName == prLastSelectedFileName)
+						if (file->fileName == prLastSelectedFileName)
 						{
 							startMultiSelection = true;
 							prAddFileNameInSelection(prLastSelectedFileName, false);
@@ -2104,13 +2167,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 						{
 							if (dlg_countSelectionMax == 0) // infinite selection
 							{
-								prAddFileNameInSelection(infos.fileName, false);
+								prAddFileNameInSelection(file->fileName, false);
 							}
 							else // selection limited by size
 							{
 								if (prSelectedFileNames.size() < dlg_countSelectionMax)
 								{
-									prAddFileNameInSelection(infos.fileName, false);
+									prAddFileNameInSelection(file->fileName, false);
 								}
 								else
 								{
@@ -2122,7 +2185,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 							}
 						}
 
-						if (infos.fileName == fileNameToSelect)
+						if (file->fileName == fileNameToSelect)
 						{
 							if (!startMultiSelection) // we are before the last Selected FileName, so we must inverse
 							{
@@ -2148,7 +2211,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		{
 			prSelectedFileNames.clear();
 			inResetBuffer(puFileNameBuffer);
-			prAddFileNameInSelection(vInfos.fileName, true);
+			prAddFileNameInSelection(vInfos->fileName, true);
 		}
 	}
 
@@ -2187,7 +2250,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 	{
 		prShowDrives = false;
 		prCurrentPath = vPath;
-		prFileList.clear();
+		prClearFileList();
 		prCurrentPath_Decomposition.clear();
 		if (dlg_filters.empty()) // directory mode
 			prSetDefaultFileName(".");
@@ -2222,11 +2285,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		}
 	}
 
-	void IGFD::FileDialog::prCompleteFileInfos(FileInfoStruct* vFileInfoStruct)
+	void IGFD::FileDialog::prCompleteFileInfos(std::shared_ptr<FileInfos> vInfos)
 	{
-		if (vFileInfoStruct && 
-			vFileInfoStruct->fileName != "." && 
-			vFileInfoStruct->fileName != "..")
+		if (!vInfos.use_count())
+			return;
+
+		if (vInfos->fileName != "." &&
+			vInfos->fileName != "..")
 		{
 			// _stat struct :
 			//dev_t     st_dev;     /* ID of device containing file */
@@ -2245,23 +2310,23 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 
 			std::string fpn;
 
-			if (vFileInfoStruct->type == 'f') // file
-				fpn = vFileInfoStruct->filePath + PATH_SEP + vFileInfoStruct->fileName;
-			else if (vFileInfoStruct->type == 'l') // link
-				fpn = vFileInfoStruct->filePath + PATH_SEP + vFileInfoStruct->fileName;
-			else if (vFileInfoStruct->type == 'd') // directory
-				fpn = vFileInfoStruct->filePath + PATH_SEP + vFileInfoStruct->fileName;
+			if (vInfos->fileType == 'f') // file
+				fpn = vInfos->filePath + PATH_SEP + vInfos->fileName;
+			else if (vInfos->fileType == 'l') // link
+				fpn = vInfos->filePath + PATH_SEP + vInfos->fileName;
+			else if (vInfos->fileType == 'd') // directory
+				fpn = vInfos->filePath + PATH_SEP + vInfos->fileName;
 
 			struct stat statInfos;
 			char timebuf[100];
 			int result = stat(fpn.c_str(), &statInfos);
 			if (!result)
 			{
-				if (vFileInfoStruct->type != 'd')
+				if (vInfos->fileType != 'd')
 				{
-					vFileInfoStruct->fileSize = (size_t)statInfos.st_size;
-					sFormatFileSize(vFileInfoStruct->fileSize,
-						&vFileInfoStruct->formatedFileSize);
+					vInfos->fileSize = (size_t)statInfos.st_size;
+					sFormatFileSize(vInfos->fileSize,
+						&vInfos->formatedFileSize);
 				}
 
 				size_t len = 0;
@@ -2275,7 +2340,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 #endif // MSVC
 				if (len)
 				{
-					vFileInfoStruct->fileModifDate = std::string(timebuf, len);
+					vInfos->fileModifDate = std::string(timebuf, len);
 				}
 			}
 		}
@@ -2302,10 +2367,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileName = tableHeaderDescendingIcon + prHeaderFileName;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type == 'd'); // directory in first
-						return (stricmp(a.fileName.c_str(), b.fileName.c_str()) < 0); // sort in insensitive case
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType == 'd'); // directory in first
+						return (stricmp(a->fileName.c_str(), b->fileName.c_str()) < 0); // sort in insensitive case
 					});
 			}
 			else
@@ -2314,10 +2382,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileName = tableHeaderAscendingIcon + prHeaderFileName;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type != 'd'); // directory in last
-						return (stricmp(a.fileName.c_str(), b.fileName.c_str()) > 0); // sort in insensitive case
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType != 'd'); // directory in last
+						return (stricmp(a->fileName.c_str(), b->fileName.c_str()) > 0); // sort in insensitive case
 					});
 			}
 		}
@@ -2332,10 +2403,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileType = tableHeaderDescendingIcon + prHeaderFileType;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type == 'd'); // directory in first
-						return (a.ext < b.ext); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType == 'd'); // directory in first
+						return (a->fileExt < b->fileExt); // else
 					});
 			}
 			else
@@ -2344,10 +2418,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileType = tableHeaderAscendingIcon + prHeaderFileType;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type != 'd'); // directory in last
-						return (a.ext > b.ext); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType != 'd'); // directory in last
+						return (a->fileExt > b->fileExt); // else
 					});
 			}
 		}
@@ -2362,10 +2439,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileSize = tableHeaderDescendingIcon + prHeaderFileSize;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type == 'd'); // directory in first
-						return (a.fileSize < b.fileSize); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType == 'd'); // directory in first
+						return (a->fileSize < b->fileSize); // else
 					});
 			}
 			else
@@ -2374,10 +2454,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileSize = tableHeaderAscendingIcon + prHeaderFileSize;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type != 'd'); // directory in last
-						return (a.fileSize > b.fileSize); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType != 'd'); // directory in last
+						return (a->fileSize > b->fileSize); // else
 					});
 			}
 		}
@@ -2392,10 +2475,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileDate = tableHeaderDescendingIcon + prHeaderFileDate;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type == 'd'); // directory in first
-						return (a.fileModifDate < b.fileModifDate); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType == 'd'); // directory in first
+						return (a->fileModifDate < b->fileModifDate); // else
 					});
 			}
 			else
@@ -2404,10 +2490,13 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				prHeaderFileDate = tableHeaderAscendingIcon + prHeaderFileDate;
 #endif // USE_CUSTOM_SORTING_ICON
 				std::sort(prFileList.begin(), prFileList.end(),
-					[](const FileInfoStruct& a, const FileInfoStruct& b) -> bool
+					[](std::shared_ptr<FileInfos> a, std::shared_ptr<FileInfos> b) -> bool
 					{
-						if (a.type != b.type) return (a.type != 'd'); // directory in last
-						return (a.fileModifDate > b.fileModifDate); // else
+						if (!a.use_count() || !b.use_count())
+							return false;
+
+						if (a->fileType != b->fileType) return (a->fileType != 'd'); // directory in last
+						return (a->fileModifDate > b->fileModifDate); // else
 					});
 			}
 		}
@@ -2417,9 +2506,26 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 			prSortingField = vSortingField;
 		}
 
-		prLoadTexturesOfFiles();
-
 		prApplyFilteringOnFileList();
+	}
+
+	void IGFD::FileDialog::prClearFileList()
+	{
+		prFilteredFileList.clear();
+		for (auto file : prFileList)
+		{
+			if (file.use_count())
+			{
+				if (file->thumbnailInfo.isReadyToDisplay)
+				{
+					if (prDestroyTextureFun)
+					{
+						prDestroyTextureFun(&file->thumbnailInfo);
+					}
+				}
+			}
+		}
+		prFileList.clear();
 	}
 
 	void IGFD::FileDialog::prScanDir(const std::string& vPath)
@@ -2442,7 +2548,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 #endif // WIN32
 			n = scandir(path.c_str(), &files, nullptr, inAlphaSort);
 
-			prFileList.clear();
+			prClearFileList();
 
 			if (n > 0)
 			{
@@ -2450,32 +2556,32 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				{
 					struct dirent* ent = files[i];
 
-					FileInfoStruct infos;
+					auto info = std::make_shared<FileInfos>();
 
-					infos.filePath = path;
-					infos.fileName = ent->d_name;
-					infos.fileName_optimized = prOptimizeFilenameForSearchOperations(infos.fileName);
+					info->filePath = path;
+					info->fileName = ent->d_name;
+					info->fileName_optimized = prOptimizeFilenameForSearchOperations(info->fileName);
 
-					if (infos.fileName != "." 
+					if (info->fileName != "."
 						|| dlg_filters.empty()) // in directory mode we must display the curent dir "."
 					{
 						switch (ent->d_type)
 						{
 						case DT_REG:
-							infos.type = 'f'; break;
+							info->fileType = 'f'; break;
 						case DT_DIR:
-							infos.type = 'd'; break;
+							info->fileType = 'd'; break;
 						case DT_LNK:
-							infos.type = 'l'; break;
+							info->fileType = 'l'; break;
 						}
 
-						if (infos.type == 'f' ||
-							infos.type == 'l') // link can have the same extention of a file
+						if (info->fileType == 'f' ||
+							info->fileType == 'l') // link can have the same extention of a file
 						{
-							size_t lpt = infos.fileName.find_last_of('.');
+							size_t lpt = info->fileName.find_last_of('.');
 							if (lpt != std::string::npos)
 							{
-								infos.ext = infos.fileName.substr(lpt);
+								info->fileExt = info->fileName.substr(lpt);
 							}
 
 							if (!dlg_filters.empty())
@@ -2484,7 +2590,7 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 								// we do that here, for avoid doing that during filelist display
 								// for better fps
 								if (!prSelectedFilter.empty() && // selected filter exist
-									(!prSelectedFilter.filterExist(infos.ext) && // filter not found
+									(!prSelectedFilter.filterExist(info->fileExt) && // filter not found
 										prSelectedFilter.filter != ".*"))
 								{
 									continue;
@@ -2492,8 +2598,8 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 							}
 						}
 
-						prCompleteFileInfos(&infos);
-						prFileList.push_back(infos);
+						prCompleteFileInfos(info);
+						prFileList.push_back(info);
 					}
 				}
 
@@ -2505,107 +2611,10 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				free(files);
 			}
 
+			prStartThumbnailGeneration();
 			prSortFields(prSortingField);
 		}
 	}
-
-#ifdef USE_THUMBNAILS
-	#ifndef STB_IMAGE_IMPLEMENTATION
-	#define STB_IMAGE_IMPLEMENTATION
-	#endif // STB_IMAGE_IMPLEMENTATION
-	#include "stb/stb_image.h"
-	#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION
-	#define STB_IMAGE_RESIZE_IMPLEMENTATION
-	#endif // STB_IMAGE_RESIZE_IMPLEMENTATION
-	#include "stb/stb_image_resize.h"
-	#include <glad/glad.h> // temporary
-	void IGFD::FileDialog::prLoadTexturesOfFiles()
-	{
-		int max_conurent_thread = 2;
-		for (auto& file : prFileList)
-		{
-			if (file.type == 'f')
-			{
-				if (file.ext == ".png"
-					|| file.ext == ".bmp"
-					|| file.ext == ".tga"
-					|| file.ext == ".jpg" || file.ext == ".jpeg"
-					|| file.ext == ".gif"
-					|| file.ext == ".psd"
-					|| file.ext == ".pic" 
-					|| file.ext == ".ppm" || file.ext == ".pgm"
-					//|| file.ext == ".hdr" => format float so in few times
-					)
-				{
-					auto fpn = file.filePath + PATH_SEP + file.fileName;
-
-					int w = 0;
-					int h = 0;
-					int chans = 0;
-					auto datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb);
-					if (datas != 0 && (chans == 4 || chans == 2))
-					{
-						stbi_image_free(datas);
-						datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb_alpha);
-					}
-					if (datas)
-					{
-						file.textureDatas = datas;
-						file.textureWidth = w;
-						file.textureHeight = h;
-						file.textureChannels = chans;
-
-						// resize
-						const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
-						const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
-						const int newBufSize = newWidth * newHeight * chans;
-						auto resizedData = new uint8_t[newBufSize];
-						const int resizeRes = stbir_resize_uint8(
-							datas, w, h, w * chans,
-							resizedData, newWidth, newHeight, newWidth * file.textureChannels,
-							chans);
-
-						if (resizeRes)
-						{
-							file.textureDatas = resizedData;
-							file.textureWidth = newWidth;
-							file.textureHeight = newHeight;
-							file.textureChannels = chans;
-						}
-						stbi_image_free(datas);
-
-						if (file.textureDatas)
-						{
-							GLuint textureId = 0;
-							glGenTextures(1, &textureId);
-							file.textureID = (ImTextureID)(size_t)textureId;
-							glBindTexture(GL_TEXTURE_2D, textureId);
-							glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-							glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-							GLenum format; GLenum internalformat;
-							if (file.textureChannels == 1) { format = GL_RED; internalformat = GL_RED; }
-							else if (file.textureChannels == 2) { format = GL_RG; internalformat = GL_RG; }
-							else if (file.textureChannels == 3) { format = GL_RGB; internalformat = GL_RGB; }
-							else if (file.textureChannels == 4) { format = GL_RGBA;	internalformat = GL_RGBA; }
-							glTexImage2D(GL_TEXTURE_2D, 0, internalformat, (GLsizei)file.textureWidth, (GLsizei)file.textureHeight, 0, format, GL_UNSIGNED_BYTE, file.textureDatas);
-							glGenerateMipmap(GL_TEXTURE_2D);
-							glFinish();
-							glBindTexture(GL_TEXTURE_2D, 0);
-
-							delete[] file.textureDatas;
-							file.textureDatas = nullptr;
-						}
-					}
-				}
-			}
-		}
-	}
-
-
-#endif // USE_THUMBNAILS
 
 	void IGFD::FileDialog::prSetCurrentDir(const std::string& vPath)
 	{
@@ -2726,17 +2735,17 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		{
 			prCurrentPath.clear();
 			prCurrentPath_Decomposition.clear();
-			prFileList.clear();
+			prClearFileList();
 			for (auto& drive : drives)
 			{
-				FileInfoStruct infos;
-				infos.fileName = drive;
-				infos.fileName_optimized = prOptimizeFilenameForSearchOperations(drive);
-				infos.type = 'd';
+				auto info = std::make_shared<FileInfos>();
+				info->fileName = drive;
+				info->fileName_optimized = prOptimizeFilenameForSearchOperations(drive);
+				info->fileType = 'd';
 
-				if (!infos.fileName.empty())
+				if (!info->fileName.empty())
 				{
-					prFileList.push_back(infos);
+					prFileList.push_back(info);
 				}
 			}
 			prShowDrives = true;
@@ -2858,28 +2867,29 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 	{
 		prFilteredFileList.clear();
 
-		for (auto& it : prFileList)
+		for (auto file : prFileList)
 		{
-			const FileInfoStruct& infos = it;
+			if (!file.use_count())
+				continue;
 
 			bool show = true;
 
 			// if search tag
 			if (!searchTag.empty() &&
-				infos.fileName_optimized.find(searchTag) == std::string::npos && // first try wihtout case and accents
-				infos.fileName.find(searchTag) == std::string::npos) // second if searched with case and accents
+				file->fileName_optimized.find(searchTag) == std::string::npos && // first try wihtout case and accents
+				file->fileName.find(searchTag) == std::string::npos) // second if searched with case and accents
 			{
 				show = false;
 			}
 
-			if (dlg_filters.empty() && infos.type != 'd') // directory mode
+			if (dlg_filters.empty() && file->fileType != 'd') // directory mode
 			{
 				show = false;
 			}
 
 			if (show)
 			{
-				prFilteredFileList.push_back(infos);
+				prFilteredFileList.push_back(file);
 			}
 		}
 	}
@@ -2896,33 +2906,37 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 
 		for (size_t i = prLocateFileByInputChar_lastFileIdx; i < prFilteredFileList.size(); i++)
 		{
-			if (prFilteredFileList[i].fileName_optimized[0] == vC || // lower case search
-				prFilteredFileList[i].fileName[0] == vC) // maybe upper case search
+			if (prFilteredFileList[i].use_count())
 			{
-				//float p = ((float)i) * ImGui::GetTextLineHeightWithSpacing();
-				float p = (float)((double)i / (double)prFilteredFileList.size()) * ImGui::GetScrollMaxY();
-				ImGui::SetScrollY(p);
-				prLocateFileByInputChar_lastFound = true;
-				prLocateFileByInputChar_lastFileIdx = i;
-				prStartFlashItem(prLocateFileByInputChar_lastFileIdx);
-
-				auto infos = &prFilteredFileList[prLocateFileByInputChar_lastFileIdx];
-
-				if (infos->type == 'd')
+				if (prFilteredFileList[i]->fileName_optimized[0] == vC || // lower case search
+					prFilteredFileList[i]->fileName[0] == vC) // maybe upper case search
 				{
-					if (dlg_filters.empty()) // directory chooser
+					//float p = ((float)i) * ImGui::GetTextLineHeightWithSpacing();
+					float p = (float)((double)i / (double)prFilteredFileList.size()) * ImGui::GetScrollMaxY();
+					ImGui::SetScrollY(p);
+					prLocateFileByInputChar_lastFound = true;
+					prLocateFileByInputChar_lastFileIdx = i;
+					prStartFlashItem(prLocateFileByInputChar_lastFileIdx);
+
+					auto infos = prFilteredFileList[prLocateFileByInputChar_lastFileIdx];
+					if (infos.use_count())
 					{
-						prSelectFileName(*infos);
+						if (infos->fileType == 'd')
+						{
+							if (dlg_filters.empty()) // directory chooser
+							{
+								prSelectFileName(infos);
+							}
+						}
+						else
+						{
+							prSelectFileName(infos);
+						}
+
+						found = true;
+						break;
 					}
 				}
-				else
-				{
-					prSelectFileName(*infos);
-				}
-
-				found = true;
-
-				break;
 			}
 		}
 
@@ -3005,58 +3019,60 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 				ImGui::SetScrollY(p);
 				prStartFlashItem(prLocateFileByInputChar_lastFileIdx);
 
-				auto infos = &prFilteredFileList[prLocateFileByInputChar_lastFileIdx];
-
-				if (infos->type == 'd')
+				auto infos = prFilteredFileList[prLocateFileByInputChar_lastFileIdx];
+				if (infos.use_count())
 				{
-					if (!dlg_filters.empty() || enterInDirectory)
+					if (infos->fileType == 'd')
 					{
-						if (enterInDirectory)
+						if (!dlg_filters.empty() || enterInDirectory)
 						{
-							if (prSelectDirectory(*infos))
+							if (enterInDirectory)
 							{
-								// changement de repertoire
-								prSetPath(prCurrentPath);
-								if (prLocateFileByInputChar_lastFileIdx > prFilteredFileList.size() - 1)
+								if (prSelectDirectory(infos))
 								{
-									prLocateFileByInputChar_lastFileIdx = 0;
+									// changement de repertoire
+									prSetPath(prCurrentPath);
+									if (prLocateFileByInputChar_lastFileIdx > prFilteredFileList.size() - 1)
+									{
+										prLocateFileByInputChar_lastFileIdx = 0;
+									}
 								}
 							}
 						}
-					}
-					else // directory chooser
-					{
-						prSelectFileName(*infos);
-					}
-				}
-				else
-				{
-					prSelectFileName(*infos);
-				}
-
-				if (exitDirectory)
-				{
-					FileInfoStruct nfo;
-					nfo.fileName = "..";
-
-					if (prSelectDirectory(nfo))
-					{
-						// changement de repertoire
-						prSetPath(prCurrentPath);
-						if (prLocateFileByInputChar_lastFileIdx > prFilteredFileList.size() - 1)
+						else // directory chooser
 						{
-							prLocateFileByInputChar_lastFileIdx = 0;
+							prSelectFileName(infos);
 						}
 					}
-#ifdef WIN32
 					else
 					{
-						if (prCurrentPath_Decomposition.size() == 1)
-						{
-							prGetDrives(); // display drives
-						}
+						prSelectFileName(infos);
 					}
+
+					if (exitDirectory)
+					{
+						auto nfo = std::make_shared<FileInfos>();
+						nfo->fileName = "..";
+
+						if (prSelectDirectory(nfo))
+						{
+							// changement de repertoire
+							prSetPath(prCurrentPath);
+							if (prLocateFileByInputChar_lastFileIdx > prFilteredFileList.size() - 1)
+							{
+								prLocateFileByInputChar_lastFileIdx = 0;
+							}
+						}
+#ifdef WIN32
+						else
+						{
+							if (prCurrentPath_Decomposition.size() == 1)
+							{
+								prGetDrives(); // display drives
+							}
+						}
 #endif // WIN32
+					}
 				}
 			}
 		}
@@ -3218,6 +3234,19 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 	}
 #endif // USE_BOOKMARK
 
+#ifdef USE_THUMBNAILS
+	void IGFD::FileDialog::SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun)
+	{
+		prCreateTextureFun = vCreateTextureFun;
+	}
+
+	void IGFD::FileDialog::SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun)
+	{
+		prDestroyTextureFun = vCreateTextureFun;
+	}
+
+#endif // USE_THUMBNAILS
+
 	//////////////////////////////////////////////////////////////////////////////
 	//// OVERWRITE DIALOG ////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////
@@ -3306,6 +3335,128 @@ inline bool inRadioButton(const char* vLabel, bool vToggled)
 		}
 		return false;
 	}
+
+#ifdef USE_THUMBNAILS
+	void IGFD::FileDialog::prLoadTexturesOfFiles()
+	{
+		prCountFiles = 0U;
+		prIsWorking = true;
+
+		int max_conurent_thread = 2;
+		for (auto file : prFileList)
+		{
+			if (!prIsWorking)
+				break;
+
+			if (!file.use_count())
+				continue;
+
+			if (file->fileType == 'f')
+			{
+				if (file->fileExt == ".png"
+					|| file->fileExt == ".bmp"
+					|| file->fileExt == ".tga"
+					|| file->fileExt == ".jpg" || file->fileExt == ".jpeg"
+					|| file->fileExt == ".gif"
+					|| file->fileExt == ".psd"
+					|| file->fileExt == ".pic"
+					|| file->fileExt == ".ppm" || file->fileExt == ".pgm"
+					//|| file->fileExt == ".hdr" => format float so in few times
+					)
+				{
+					auto fpn = file->filePath + PATH_SEP + file->fileName;
+
+					int w = 0;
+					int h = 0;
+					int chans = 0;
+					auto datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb);
+					if (datas != 0 && (chans == 4 || chans == 2))
+					{
+						stbi_image_free(datas);
+						datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb_alpha);
+					}
+					if (datas)
+					{
+						// resize
+						const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
+						const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
+						const int newBufSize = newWidth * newHeight * chans;
+						auto resizedData = new uint8_t[newBufSize];
+						const int resizeRes = stbir_resize_uint8(
+							datas, w, h, w * chans,
+							resizedData, newWidth, newHeight, newWidth * file->thumbnailInfo.textureChannels,
+							chans);
+
+						stbi_image_free(datas);
+
+						if (resizeRes)
+						{
+							file->thumbnailInfo.textureDatas = resizedData;
+							file->thumbnailInfo.textureWidth = newWidth;
+							file->thumbnailInfo.textureHeight = newHeight;
+							file->thumbnailInfo.textureChannels = chans;
+
+							// we set that at least, because will launch the gpu creation of the texture in the main thread
+							file->thumbnailInfo.isReadyToUpload = true;
+						}
+					}
+				}
+			}
+
+			prCountFiles++;
+		}
+
+		prIsWorking = false;
+	}
+
+	void IGFD::FileDialog::prStartThumbnailGeneration()
+	{
+		if (!prStopThumbnailGeneration())
+		{
+			prIsWorking = true;
+			prCountFiles = 0U;
+			prThumbnailGenerationThread = std::make_shared<std::thread>(&IGFD::FileDialog::prLoadTexturesOfFiles, this);
+		}
+	}
+
+	void IGFD::FileDialog::prDrawThumbnailGenerationProgress()
+	{
+		if (prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable())
+		{
+			if (!prIsWorking)
+			{
+				prThumbnailGenerationThread->join();
+				prFinalizeThumbnailGeneration();
+			}
+			else
+			{
+				const float p = (float)((double)prCountFiles / (double)prFileList.size());
+				inVariadicProgressBar(p, ImVec2(50, 0), "%u/%u", prCountFiles, (uint32_t)prFileList.size());
+				ImGui::SameLine();
+			}
+		}
+	}
+
+	bool IGFD::FileDialog::prStopThumbnailGeneration()
+	{
+		const bool res = prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable();
+
+		if (res)
+		{
+			prIsWorking = false;
+			prThumbnailGenerationThread->join();
+			prThumbnailGenerationThread.reset();
+		}
+
+		return res;
+	}
+
+	void IGFD::FileDialog::prFinalizeThumbnailGeneration()
+	{
+		
+	}
+
+#endif
 }
 
 #endif // __cplusplus
@@ -3856,3 +4007,21 @@ IMGUIFILEDIALOG_API void IGFD_DeserializeBookmarks(ImGuiFileDialog* vContext, co
 	}
 }
 #endif
+
+#ifdef USE_THUMBNAILS
+IMGUIFILEDIALOG_API void SetCreateTextureCallback(ImGuiFileDialog* vContext, const IGFD_CreateTextureFun vCreateTextureFun)
+{
+	if (vContext)
+	{
+		vContext->SetCreateTextureCallback(vCreateTextureFun);
+	}
+}
+
+IMGUIFILEDIALOG_API void SetDestroyTextureCallback(ImGuiFileDialog* vContext, const IGFD_DestroyTextureFun vCreateTextureFun)
+{
+	if (vContext)
+	{
+		vContext->SetDestroyTextureCallback(vCreateTextureFun);
+	}
+}
+#endif // USE_THUMBNAILS

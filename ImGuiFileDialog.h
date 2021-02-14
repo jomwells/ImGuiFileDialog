@@ -487,6 +487,19 @@ enum ImGuiFileDialogFlags_
 	ImGuiFileDialogFlags_ConfirmOverwrite = 1 << 0,
 };
 
+#ifdef USE_THUMBNAILS
+struct IGFD_Thumbnail_Info
+{
+	bool isReadyToDisplay = false;	// ready to be rendered, so texture created
+	bool isReadyToUpload = false;	// ready to upload to gpu
+	uint32_t textureID = 0;			// 2d texture id (GL, DX, VK, Etc..)
+	uint8_t* textureDatas = NULL;	// file texture datas, will be rested to null after gpu upload
+	int textureWidth = 0;			// width of the texture to upload
+	int textureHeight = 0;			// height of the texture to upload
+	int textureChannels = 0;		// count channels of the texture to upload
+};
+#endif // USE_THUMBNAILS
+
 #ifdef __cplusplus
 
 #include <imgui.h>
@@ -495,6 +508,7 @@ enum ImGuiFileDialogFlags_
 #include <utility>
 #include <fstream>
 #include <vector>
+#include <memory>
 #include <string>
 #include <set>
 #include <map>
@@ -503,6 +517,7 @@ enum ImGuiFileDialogFlags_
 #include <string>
 #include <vector>
 #include <list>
+#include <thread>
 
 namespace IGFD
 {
@@ -523,11 +538,12 @@ namespace IGFD
 	};
 
 	typedef void* UserDatas;
-	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;
-	
+	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;	// side pane function binding
+	typedef std::function<void(IGFD_Thumbnail_Info*)> CreateTextureFun;	// texture 2d creation function binding
+	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyTextureFun;			// texture 2d destroy function binding
+
 	class FileDialog
 	{
-
 	///////////////////////////////////////////////////////////////////////////////////////
 	/// PRIVATE STRUCTS / ENUMS ///////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////
@@ -536,36 +552,34 @@ namespace IGFD
 #ifdef USE_BOOKMARK
 		struct BookmarkStruct
 		{
-			std::string name;
-			std::string path;
+			std::string name;					// name of the bookmark
+			// todo: the path could be relative, better is the app is moved
+			std::string path;					// absolute path of the bookmarked directory 
 		};
 #endif // USE_BOOKMARK
 
-		enum class SortingFieldEnum
+		enum class SortingFieldEnum				// sorting for filetering of the file lsit
 		{
-			FIELD_NONE = 0,
-			FIELD_FILENAME,
-			FIELD_TYPE,
-			FIELD_SIZE,
-			FIELD_DATE
+			FIELD_NONE = 0,						// no sorting preference, result indetermined haha..
+			FIELD_FILENAME,						// sorted by filename
+			FIELD_TYPE,							// sorted by filetype
+			FIELD_SIZE,							// sorted by filesize (formated file size)
+			FIELD_DATE							// sorted by filedate
 		};
 
-		struct FileInfoStruct
+		class FileInfos
 		{
-			char type = ' ';
-			std::string filePath;
-			std::string fileName;
-			std::string fileName_optimized; // optimized for search => insensitivecase
-			std::string ext;
-			size_t fileSize = 0; // for sorting operations
-			std::string formatedFileSize;
-			std::string fileModifDate;
+		public:
+			char fileType = ' ';				// dirent fileType (f:file, d:directory, l:link)				
+			std::string filePath;				// path of the file
+			std::string fileName;				// filename of the file
+			std::string fileName_optimized;		// optimized for search => insensitivecase
+			std::string fileExt;				// extention of the file
+			size_t fileSize = 0;				// for sorting operations
+			std::string formatedFileSize;		// file size formated (10 o, 10 ko, 10 mo, 10 go)
+			std::string fileModifDate;			// file user defined format of the date (data + time by default)
 #ifdef USE_THUMBNAILS
-			ImTextureID textureID = 0; // 
-			uint8_t* textureDatas;
-			int textureWidth = 0;
-			int textureHeight = 0;
-			int textureChannels = 0;
+			IGFD_Thumbnail_Info thumbnailInfo;	// structre for the display for image file tetxure
 #endif // USE_THUMBNAILS
 		};
 
@@ -583,18 +597,8 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////
 
 	private:
-#ifdef USE_THUMBNAILS
-		enum DisplayModeEnum
-		{
-			DISPLAY_MODE_FILE_LIST = 0,
-			DISPLAY_MODE_THUMBAILS_LIST,
-			DISPLAY_MODE_SMALL_THUMBAILS,
-			DISPLAY_MODE_BIG_THUMBAILS,
-			DISPLAY_MODE_Count
-		} prDisplayMode = DisplayModeEnum::DISPLAY_MODE_FILE_LIST;
-#endif // USE_THUMBNAILS
-		std::vector<FileInfoStruct> prFileList;
-        std::vector<FileInfoStruct> prFilteredFileList;
+		std::vector<std::shared_ptr<FileInfos>> prFileList;						// base container
+        std::vector<std::shared_ptr<FileInfos>> prFilteredFileList;				// filtered container (search, sorting, etc..)
         std::unordered_map<std::string, FileExtentionInfosStruct> prFileExtentionInfos;
 		std::string prCurrentPath;
 		std::vector<std::string> prCurrentPath_Decomposition;
@@ -652,7 +656,21 @@ namespace IGFD
 		std::vector<BookmarkStruct> prBookmarks;
 		bool prBookmarkPaneShown = false;
 #endif // USE_BOOKMARK
-
+#ifdef USE_THUMBNAILS
+		enum DisplayModeEnum
+		{
+			DISPLAY_MODE_FILE_LIST = 0,
+			DISPLAY_MODE_THUMBAILS_LIST,
+			DISPLAY_MODE_SMALL_THUMBAILS,
+			DISPLAY_MODE_BIG_THUMBAILS,
+			DISPLAY_MODE_Count
+		} prDisplayMode = DisplayModeEnum::DISPLAY_MODE_FILE_LIST;
+		uint32_t prCountFiles = 0U;
+		bool prIsWorking = false;
+		std::shared_ptr<std::thread> prThumbnailGenerationThread = nullptr;
+		CreateTextureFun prCreateTextureFun = nullptr;
+		DestroyTextureFun prDestroyTextureFun = nullptr;
+#endif // USE_THUMBNAILS
 	///////////////////////////////////////////////////////////////////////////////////////
 	/// PUBLIC PARAMS /////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////
@@ -819,7 +837,10 @@ namespace IGFD
 		void DeserializeBookmarks(									// deserialize bookmarks : load bookmar buffer to load in the dialog (saved from previous use with SerializeBookmarks())
 			const std::string& vBookmarks);							// bookmark buffer to load
 #endif // USE_BOOKMARK
-
+#ifdef USE_THUMBNAILS
+		void SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun);
+		void SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun);
+#endif // USE_THUMBNAILS
 	///////////////////////////////////////////////////////////////////////////////////////
 	/// PROTECTED'S METHODS ///////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////
@@ -833,12 +854,10 @@ namespace IGFD
 		// widgets components
 		virtual void prDrawDirectoryCreation();						// draw directory creation widget
 		virtual void prDrawPathComposer();							// draw path composer widget
-#ifdef USE_THUMBNAILS
-		virtual void prDrawDisplayModeToolBar();					// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
-#endif // USE_THUMBNAILS
 		virtual void prDrawSearchBar();								// draw search bar
 		virtual void prDrawFileListView(ImVec2 vSize);				// draw file list viexw
 #ifdef USE_THUMBNAILS
+		virtual void prDrawDisplayModeToolBar();					// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
 		virtual void prDrawThumbnailsListView(ImVec2 vSize);		// draw file list view with small thumbnails on the same line
 		virtual void prDrawSmallThumbnailsView(ImVec2 vSize);		// draw a grid of small thumbnails
 		virtual void prDrawBigThumbnailsView(ImVec2 vSize);			// draw a grid of bigs thumbnails
@@ -849,35 +868,43 @@ namespace IGFD
 #endif // USE_BOOKMARK
 
 		// others
-		bool prSelectableItem(int vidx, const FileInfoStruct& vInfos, bool vSelected, const char* vFmt, ...);				// selectable item for table
+		bool prSelectableItem(int vidx, std::shared_ptr<FileInfos> vInfos, bool vSelected, const char* vFmt, ...);			// selectable item for table
 		void prResetEvents();																								// reset events (path, drives, continue)
 		void prSetDefaultFileName(const std::string& vFileName);															// set default file name
-		bool prSelectDirectory(const FileInfoStruct& vInfos);																// enter directory 
-		void prSelectFileName(const FileInfoStruct& vInfos);																// select filename
+		bool prSelectDirectory(std::shared_ptr<FileInfos> vInfos);															// enter directory 
+		void prSelectFileName(std::shared_ptr<FileInfos> vInfos);															// select filename
 		void prRemoveFileNameInSelection(const std::string& vFileName);														// selection : remove a file name
 		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);						// selection : add a file name
 		void prSetPath(const std::string& vPath);																			// set the path of the dialog, will launch the directory scan for populate the file listview
-		void prCompleteFileInfos(FileInfoStruct *vFileInfoStruct);															// set time and date infos of a file (detail view mode)
+		void prCompleteFileInfos(std::shared_ptr<FileInfos> FileInfos);														// set time and date infos of a file (detail view mode)
 		void prSortFields(SortingFieldEnum vSortingField = SortingFieldEnum::FIELD_NONE, 	bool vCanChangeOrder = false);	// will sort a column
+		void prClearFileList();																								// clear file list, will destroy thumbnail textures
 		void prScanDir(const std::string& vPath);																			// scan the directory for retrieve the file list
-		void prLoadTexturesOfFiles();																						// will load (threaded) the texture of each files and will generate a thumbnail ready to display
 		void prSetCurrentDir(const std::string& vPath);																		// define current directory for scan
 		bool prCreateDir(const std::string& vPath);																			// create a directory on the file system
 		std::string prComposeNewPath(std::vector<std::string>::iterator vIter);												// compose a path from the compose path widget
 		void prGetDrives();																									// list drives on windows platform
 		void prParseFilters(const char* vFilters);																			// parse filter syntax, detect and parse filter collection
 		void prSetSelectedFilterWithExt(const std::string& vFilter);														// select filter
-		static std::string prOptimizeFilenameForSearchOperations(std::string vFileName);									// easier the search by lower case all filenames
+		std::string prOptimizeFilenameForSearchOperations(std::string vFileName);											// easier the search by lower case all filenames
 	    void prApplyFilteringOnFileList();																					// filter the file list accroding to the searh tags
 		bool prConfirm_Or_OpenOverWriteFileDialog_IfNeeded(bool vLastAction, ImGuiWindowFlags vFlags);						// treatment of the result, start the confirm to overwrite dialog if needed (if defined with flag)
 		bool prIsFileExist(const std::string& vFile);																		// is file exist
+
+#ifdef USE_THUMBNAILS
+		void prLoadTexturesOfFiles();				// will load (threaded) the texture of each files and will generate a thumbnail ready to display
+		void prStartThumbnailGeneration();
+		void prDrawThumbnailGenerationProgress();
+		bool prStopThumbnailGeneration();
+		void prFinalizeThumbnailGeneration();
+#endif
 
 #ifdef USE_EXPLORATION_BY_KEYS
 		// file localization by input chat // widget flashing
 		void prLocateByInputKey();																							// select a file line in listview according to char key
 		bool prLocateItem_Loop(ImWchar vC);																					// restrat for start of list view if not found a corresponding file
 		void prExploreWithkeys();																							// select file/directory line in listview accroding to up/down enter/backspace keys
-		static bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
+		bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
 			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
 			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
 		void prStartFlashItem(size_t vIdx);																					// define than an item must be flashed
@@ -950,7 +977,13 @@ typedef IGFD::FileDialog ImGuiFileDialog;
 	IMGUIFILEDIALOG_API void IGFD_Destroy(ImGuiFileDialog *vContext);										// destroy the filedialog context
 
 	typedef void (*IGFD_PaneFun)(const char*, void*, bool*);												// callback fucntion for display the pane
-	
+
+#ifdef USE_THUMBNAILS
+	typedef void (*IGFD_CreateTextureFun)(IGFD_Thumbnail_Info*);										// callback fucntion for display the pane
+	typedef void (*IGFD_DestroyTextureFun)(IGFD_Thumbnail_Info*);										// callback fucntion for display the pane
+#endif // USE_THUMBNAILS
+
+
 	IMGUIFILEDIALOG_API void IGFD_OpenDialog(					// open a standard dialog
 		ImGuiFileDialog* vContext,								// ImGuiFileDialog context
 		const char* vKey,										// key dialog
@@ -1124,6 +1157,14 @@ typedef IGFD::FileDialog ImGuiFileDialog;
 		const char* vBookmarks);								// bookmark buffer to load 
 #endif
 
+#ifdef USE_THUMBNAILS
+	IMGUIFILEDIALOG_API void SetCreateTextureCallback(
+		ImGuiFileDialog* vContext,
+		const IGFD_CreateTextureFun vCreateTextureFun);
+	IMGUIFILEDIALOG_API void SetDestroyTextureCallback(
+		ImGuiFileDialog* vContext,
+		const IGFD_DestroyTextureFun vCreateTextureFun);
+#endif // USE_THUMBNAILS
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
