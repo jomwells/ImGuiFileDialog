@@ -810,6 +810,9 @@ namespace IGFD
 
 	class BookMarkFeature
 	{
+	public:
+		BookMarkFeature();
+
 #ifdef USE_BOOKMARK
 	private:
 		struct BookmarkStruct
@@ -833,7 +836,6 @@ namespace IGFD
 		bool prDrawBookmarkPane(FileDialogInternal& vFileDialogInternal, const ImVec2& vSize);	// draw bookmark Pane
 
 	public:
-		BookMarkFeature();
 		std::string SerializeBookmarks();							// serialize bookmarks : return bookmark buffer to save in a file
 		void DeserializeBookmarks(									// deserialize bookmarks : load bookmar buffer to load in the dialog (saved from previous use with SerializeBookmarks())
 			const std::string& vBookmarks);							// bookmark buffer to load
