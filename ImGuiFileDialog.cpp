@@ -31,20 +31,6 @@ SOFTWARE.
 
 #include "imgui.h"
 
-#ifdef USE_THUMBNAILS
-
-#ifndef STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#endif // STB_IMAGE_IMPLEMENTATION
-#include "stb/stb_image.h"
-
-#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#endif // STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "stb/stb_image_resize.h"
-
-#endif // USE_THUMBNAILS
-
 #include <float.h>
 #include <string.h> // stricmp / strcasecmp
 #include <stdarg.h> // variadic
@@ -87,6 +73,21 @@ SOFTWARE.
 #include <cstdlib>
 #include <algorithm>
 #include <iostream>
+
+#ifdef USE_THUMBNAILS
+#ifndef DONT_DEFINE_AGAIN__STB_IMAGE_IMPLEMENTATION
+#ifndef STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#endif // STB_IMAGE_IMPLEMENTATION
+#endif // DONT_DEFINE_AGAIN__STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+#ifndef DONT_DEFINE_AGAIN__STB_IMAGE_RESIZE_IMPLEMENTATION
+#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#endif // STB_IMAGE_RESIZE_IMPLEMENTATION
+#endif // DONT_DEFINE_AGAIN__STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb/stb_image_resize.h"
+#endif // USE_THUMBNAILS
 
 namespace IGFD
 {
