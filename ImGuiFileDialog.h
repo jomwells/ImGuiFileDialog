@@ -641,7 +641,44 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	class FileManager
+	// file localization by input chat // widget flashing
+	class KeyExplorerFeature
+	{
+	public:
+		KeyExplorerFeature();
+
+#ifdef USE_EXPLORATION_BY_KEYS
+	private:
+		size_t prFlashedItem = 0;							// flash when select by char
+		float prFlashAlpha = 0.0f;							// flash when select by char
+		float prFlashAlphaAttenInSecs = 1.0f;				// fps display dependant
+		size_t prLocateFileByInputChar_lastFileIdx = 0;
+		ImWchar prLocateFileByInputChar_lastChar = 0;
+		int prLocateFileByInputChar_InputQueueCharactersSize = 0;
+		bool prLocateFileByInputChar_lastFound = false;
+
+	protected:
+		void prLocateByInputKey(FileDialogInternal& vFileDialogInternal);																							// select a file line in listview according to char key
+		bool prLocateItem_Loop(FileDialogInternal& vFileDialogInternal, ImWchar vC);																					// restrat for start of list view if not found a corresponding file
+		void prExploreWithkeys(FileDialogInternal& vFileDialogInternal);																							// select file/directory line in listview accroding to up/down enter/backspace keys
+		bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
+			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
+			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
+		void prStartFlashItem(size_t vIdx);																					// define than an item must be flashed
+		bool prBeginFlashItem(size_t vIdx);																					// start the flashing of a line in lsit view
+		void prEndFlashItem();																								// end the fleshing accrdoin to var prFlashAlphaAttenInSecs
+
+	public:
+		void SetFlashingAttenuationInSeconds(						// set the flashing time of the line in file list when use exploration keys
+			float vAttenValue);										// set the attenuation (from flashed to not flashed) in seconds
+#endif // USE_EXPLORATION_BY_KEYS
+	};
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	class FileManager : public KeyExplorerFeature
 	{
 	public: // types
 		enum class SortingFieldEnum				// sorting for filetering of the file lsit
@@ -660,11 +697,10 @@ namespace IGFD
 		std::vector<std::shared_ptr<FileInfos>> prFilteredFileList;				// filtered container (search, sorting, etc..)
 		std::string prLastSelectedFileName; // for shift multi selection
 		std::set<std::string> prSelectedFileNames;
-		ImGuiListClipper prFileListClipper;
-		char puVariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";	 // called by prSelectableItem
 		bool prCreateDirectoryMode = false;					// for create directory mode
 
 	public:
+		char puVariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";	 // called by prSelectableItem
 		bool puInputPathActivated = false; // show input for path edition
 		bool puDrivesClicked = false; // events
 		bool puPathClicked = false;// events
@@ -692,11 +728,15 @@ namespace IGFD
 		void prCompleteFileInfos(std::shared_ptr<FileInfos> FileInfos);			// set time and date infos of a file (detail view mode)
 		void prRemoveFileNameInSelection(const std::string& vFileName);														// selection : remove a file name
 		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);						// selection : add a file name
-		bool prSelectableItem(const FileDialogInternal& vFileDialogInternal, int vidx, std::shared_ptr<FileInfos> vInfos, bool vSelected, const char* vFmt, ...);
-
+		
 	public:
 		bool IsComposerEmpty();
+		size_t GetComposerSize();
 		bool IsFileListEmpty();
+		bool IsFilteredListEmpty();
+		size_t GetFilteredListSize();
+		std::shared_ptr<FileInfos> GetFilteredFileAt(size_t vIdx);
+		bool IsFileNameSelected(const std::string vFileName);
 		std::string GetBack();
 		void ClearComposer();
 		void ClearFileLists();																								// clear file list, will destroy thumbnail textures
@@ -725,7 +765,6 @@ namespace IGFD
 		std::map<std::string, std::string> GetResultingSelection();
 
 	public:
-		void DrawFileListView(FileDialogInternal& vFileDialogInternal, ImVec2 vSize); // draw file list view (default mode)
 		void DrawDirectoryCreation(const FileDialogInternal& vFileDialogInternal);						// draw directory creation widget
 		void DrawPathComposer(const FileDialogInternal& vFileDialogInternal);							// draw path composer widget
 	};
@@ -846,40 +885,6 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef USE_EXPLORATION_BY_KEYS
-	// file localization by input chat // widget flashing
-	class FileDialogKeyExploration
-	{
-	private:
-		size_t prFlashedItem = 0;							// flash when select by char
-		float prFlashAlpha = 0.0f;							// flash when select by char
-		float prFlashAlphaAttenInSecs = 1.0f;				// fps display dependant
-		size_t prLocateFileByInputChar_lastFileIdx = 0;
-		ImWchar prLocateFileByInputChar_lastChar = 0;
-		int prLocateFileByInputChar_InputQueueCharactersSize = 0;
-		bool prLocateFileByInputChar_lastFound = false;
-
-	protected:
-		void prLocateByInputKey();																							// select a file line in listview according to char key
-		bool prLocateItem_Loop(ImWchar vC);																					// restrat for start of list view if not found a corresponding file
-		void prExploreWithkeys();																							// select file/directory line in listview accroding to up/down enter/backspace keys
-		bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
-			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
-			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
-		void prStartFlashItem(size_t vIdx);																					// define than an item must be flashed
-		bool prBeginFlashItem(size_t vIdx);																					// start the flashing of a line in lsit view
-		void prEndFlashItem();																								// end the fleshing accrdoin to var prFlashAlphaAttenInSecs
-
-	public:
-		void SetFlashingAttenuationInSeconds(						// set the flashing time of the line in file list when use exploration keys
-			float vAttenValue);										// set the attenuation (from flashed to not flashed) in seconds
-	};
-#endif // USE_EXPLORATION_BY_KEYS
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 	typedef void* UserDatas;
 	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;	// side pane function binding
 	class FileDialogInternal
@@ -916,16 +921,14 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	class FileDialog : public BookMarkFeature
+	class FileDialog : public BookMarkFeature, public KeyExplorerFeature
 #ifdef USE_THUMBNAILS
 		, virtual public FileDialogThumbnail
-#endif
-#ifdef USE_EXPLORATION_BY_KEYS
-		, public FileDialogKeyExploration
 #endif
 	{
 	private:
 		FileDialogInternal prFileDialogInternal;
+		ImGuiListClipper prFileListClipper;
 
 	public:
 		bool puAnyWindowsHovered = false;					// not remember why haha :) todo : to check if we can remove
@@ -933,8 +936,8 @@ namespace IGFD
 	public:
 		static FileDialog* Instance()								// Singleton for easier accces form anywhere but only one dialog at a time
 		{
-			static auto* _instance = new FileDialog();
-			return _instance;
+			static FileDialog _instance;
+			return &_instance;
 		}
 
 	public:
@@ -1075,10 +1078,11 @@ namespace IGFD
 
 		// widgets components
 		virtual void prDrawSidePane(float vHeight);					// draw side pane
+		virtual bool prSelectableItem(int vidx, std::shared_ptr<FileInfos> vInfos, bool vSelected, const char* vFmt, ...);
+		virtual void prDrawFileListView(ImVec2 vSize); // draw file list view (default mode)
 
 		// others
 		bool prConfirm_Or_OpenOverWriteFileDialog_IfNeeded(bool vLastAction, ImGuiWindowFlags vFlags);						// treatment of the result, start the confirm to overwrite dialog if needed (if defined with flag)
-		//bool prIsFileExist(const std::string& vFile);																		// is file exist
 	};
 }
 
