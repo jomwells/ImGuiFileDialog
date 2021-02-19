@@ -710,7 +710,7 @@ namespace IGFD
 		bool CreateDir(const std::string& vPath);								// create a directory on the file system
 		void ComposeNewPath(std::vector<std::string>::iterator vIter);			// compose a path from the compose path widget
 		bool SetPathOnParentDirectoryIfAny();									// compose paht on parent directory
-		std::string GetCurrentPath();											// get the current path
+		std::string GetCurrentPath() const;											// get the current path
 		void SetCurrentPath(const std::string& vCurrentPath);					// set the current path
 		bool IsFileExist(const std::string& vFile);
 		void SetDefaultFileName(const std::string& vFileName);
@@ -729,39 +729,6 @@ namespace IGFD
 		void DrawDirectoryCreation(const FileDialogInternal& vFileDialogInternal);						// draw directory creation widget
 		void DrawPathComposer(const FileDialogInternal& vFileDialogInternal);							// draw path composer widget
 	};
-
-	typedef void* UserDatas;
-	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;	// side pane function binding
-	class FileDialogInternal
-	{
-	public:
-		FileManager puFileManager;
-		FilterManager puFilterManager;
-		SearchManager puSearchManager;
-
-	public:
-		std::string puName;
-		bool puShowDialog = false;
-		ImVec2 puDialogCenterPos = ImVec2(0, 0); // center pos for display the confirm overwrite dialog
-		int puLastImGuiFrameCount = 0; // to be sure than only one dialog displayed per frame
-		float puFooterHeight = 0.0f;
-		bool puCanWeContinue = true;// events
-		bool puOkResultToConfirm = false; // to confim if ok for OverWrite
-		bool puIsOk = false;
-
-		std::string puDLGkey;
-		std::string puDLGtitle;
-		ImGuiFileDialogFlags puDLGflags = ImGuiFileDialogFlags_None;
-		UserDatas puDLGuserDatas = nullptr;
-		PaneFun puDLGoptionsPane = nullptr;
-		float puDLGoptionsPaneWidth = 0.0f;
-		bool puDLGmodal = false;
-
-	public:
-		void NewFrame();			// new frame, so maybe neded to do somethings, like reset events
-		void ResetForNewDialog();	// reset what is needed to reset for the openging of a new dialog
-	};
-
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -841,38 +808,37 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef USE_BOOKMARK
-	class FileDialogBookMark
+	class BookMarkFeature
 	{
+#ifdef USE_BOOKMARK
 	private:
 		struct BookmarkStruct
 		{
 			std::string name;					// name of the bookmark
-			// todo: the path could be relative, better is the app is moved
+			// todo: the path could be relative, better if the app is movedn but bookmarked path can be outside of the app
 			std::string path;					// absolute path of the bookmarked directory 
 		};
 
 	private:
 		ImGuiListClipper prBookmarkClipper;
 		std::vector<BookmarkStruct> prBookmarks;
+		char prBookmarkEditBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
 
-	public:
+	protected:
 		float prBookmarkWidth = 200.0f;
 		bool prBookmarkPaneShown = false;
-
-	protected:
-		char puBookmarkEditBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-
+		
 	protected:
 		void prDrawBookmarkButton();	// draw bookmark button
-		bool prDrawBookmarkPane(const ImVec2& vSize, FileManager& vPath, std::string& vNewPath);	// draw bookmark Pane
+		bool prDrawBookmarkPane(FileDialogInternal& vFileDialogInternal, const ImVec2& vSize);	// draw bookmark Pane
 
 	public:
+		BookMarkFeature();
 		std::string SerializeBookmarks();							// serialize bookmarks : return bookmark buffer to save in a file
 		void DeserializeBookmarks(									// deserialize bookmarks : load bookmar buffer to load in the dialog (saved from previous use with SerializeBookmarks())
 			const std::string& vBookmarks);							// bookmark buffer to load
-	};
 #endif // USE_BOOKMARK
+	};
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -912,12 +878,45 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	class FileDialog
+	typedef void* UserDatas;
+	typedef std::function<void(const char*, UserDatas, bool*)> PaneFun;	// side pane function binding
+	class FileDialogInternal
+	{
+	public:
+		FileManager puFileManager;
+		FilterManager puFilterManager;
+		SearchManager puSearchManager;
+
+	public:
+		std::string puName;
+		bool puShowDialog = false;
+		ImVec2 puDialogCenterPos = ImVec2(0, 0); // center pos for display the confirm overwrite dialog
+		int puLastImGuiFrameCount = 0; // to be sure than only one dialog displayed per frame
+		float puFooterHeight = 0.0f;
+		bool puCanWeContinue = true;// events
+		bool puOkResultToConfirm = false; // to confim if ok for OverWrite
+		bool puIsOk = false;
+
+		std::string puDLGkey;
+		std::string puDLGtitle;
+		ImGuiFileDialogFlags puDLGflags = ImGuiFileDialogFlags_None;
+		UserDatas puDLGuserDatas = nullptr;
+		PaneFun puDLGoptionsPane = nullptr;
+		float puDLGoptionsPaneWidth = 0.0f;
+		bool puDLGmodal = false;
+
+	public:
+		void NewFrame();			// new frame, so maybe neded to do somethings, like reset events
+		void ResetForNewDialog();	// reset what is needed to reset for the openging of a new dialog
+	};
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	class FileDialog : public BookMarkFeature
 #ifdef USE_THUMBNAILS
 		, virtual public FileDialogThumbnail
-#endif
-#ifdef USE_BOOKMARK
-		, public FileDialogBookMark
 #endif
 #ifdef USE_EXPLORATION_BY_KEYS
 		, public FileDialogKeyExploration

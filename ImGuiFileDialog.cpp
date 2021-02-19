@@ -1400,7 +1400,7 @@ namespace IGFD
 		}
 		return false;
 	}
-	std::string IGFD::FileManager::GetCurrentPath()
+	std::string IGFD::FileManager::GetCurrentPath() const
 	{
 		return prCurrentPath;
 	}
@@ -2204,24 +2204,22 @@ namespace IGFD
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
 
+	IGFD::BookMarkFeature::BookMarkFeature()
+	{
 #ifdef USE_BOOKMARK
-	IGFD::FileDialogBookMark::FileDialogBookMark()
-	{
-		prBookmarkPaneShown = false;
 		prBookmarkWidth = defaultBookmarkPaneWith;
+#endif // USE_BOOKMARK
 	}
-	IGFD::FileDialogBookMark::~FileDialogBookMark()
-	{
 
-	}
-	void IGFD::FileDialogBookMark::prDrawBookmarkButton()
+#ifdef USE_BOOKMARK
+	void IGFD::BookMarkFeature::prDrawBookmarkButton()
 	{
 		IMGUI_TOGGLE_BUTTON(bookmarksButtonString, &prBookmarkPaneShown);
 
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(bookmarksButtonHelpString);
 	}
-	bool IGFD::FileDialogBookMark::prDrawBookmarkPane(const ImVec2& vSize, IGFD::FileManager& vFileDialogFileManager, std::string& vNewPath)
+	bool IGFD::BookMarkFeature::prDrawBookmarkPane(FileDialogInternal& vFileDialogInternal, const ImVec2& vSize)
 	{
 		bool res = false;
 
@@ -2231,11 +2229,11 @@ namespace IGFD
 
 		if (IMGUI_BUTTON(addBookmarkButtonString "##ImGuiFileDialogAddBookmark"))
 		{
-			if (!vFileDialogFileManager.IsEmpty())
+			if (!vFileDialogInternal.puFileManager.IsComposerEmpty())
 			{
 				BookmarkStruct bookmark;
-				bookmark.name = vFileDialogFileManager.GetBack();
-				bookmark.path = vFileDialogFileManager.GetCurrentPath();
+				bookmark.name = vFileDialogInternal.puFileManager.GetBack();
+				bookmark.path = vFileDialogInternal.puFileManager.GetCurrentPath();
 				prBookmarks.push_back(bookmark);
 			}
 		}
@@ -2256,9 +2254,9 @@ namespace IGFD
 				ImGui::SameLine();
 
 				ImGui::PushItemWidth(vSize.x - ImGui::GetCursorPosX());
-				if (ImGui::InputText("##ImGuiFileDialogBookmarkEdit", puBookmarkEditBuffer, MAX_FILE_DIALOG_NAME_BUFFER))
+				if (ImGui::InputText("##ImGuiFileDialogBookmarkEdit", prBookmarkEditBuffer, MAX_FILE_DIALOG_NAME_BUFFER))
 				{
-					prBookmarks[selectedBookmarkForEdition].name = std::string(puBookmarkEditBuffer);
+					prBookmarks[selectedBookmarkForEdition].name = std::string(prBookmarkEditBuffer);
 				}
 				ImGui::PopItemWidth();
 			}
@@ -2279,15 +2277,16 @@ namespace IGFD
 					if (ImGui::Selectable(bookmark.name.c_str(), selectedBookmarkForEdition == i,
 						ImGuiSelectableFlags_AllowDoubleClick) |
 						(selectedBookmarkForEdition == -1 &&
-							bookmark.path == vFileDialogFileManager.GetCurrentPath())) // select if path is current
+							bookmark.path == vFileDialogInternal.puFileManager.GetCurrentPath())) // select if path is current
 					{
 						selectedBookmarkForEdition = i;
-						inResetBuffer(puBookmarkEditBuffer);
-						inAppendToBuffer(puBookmarkEditBuffer, MAX_FILE_DIALOG_NAME_BUFFER, bookmark.name);
+						inResetBuffer(prBookmarkEditBuffer);
+						inAppendToBuffer(prBookmarkEditBuffer, MAX_FILE_DIALOG_NAME_BUFFER, bookmark.name);
 
 						if (ImGui::IsMouseDoubleClicked(0)) // apply path
 						{
-							vNewPath = bookmark.path;
+							vFileDialogInternal.puFileManager.SetCurrentPath(bookmark.path);
+							vFileDialogInternal.puFileManager.OpenCurrentPath(vFileDialogInternal);
 							res = true;
 						}
 					}
@@ -2304,7 +2303,7 @@ namespace IGFD
 		return res;
 	}
 
-	std::string IGFD::FileDialogBookMark::SerializeBookmarks()
+	std::string IGFD::BookMarkFeature::SerializeBookmarks()
 	{
 		std::string res;
 
@@ -2319,7 +2318,7 @@ namespace IGFD
 		return res;
 	}
 
-	void IGFD::FileDialogBookMark::DeserializeBookmarks(const std::string& vBookmarks)
+	void IGFD::BookMarkFeature::DeserializeBookmarks(const std::string& vBookmarks)
 	{
 		if (!vBookmarks.empty())
 		{
@@ -2713,12 +2712,9 @@ namespace IGFD
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
 
-	IGFD::FileDialog::FileDialog()
+	IGFD::FileDialog::FileDialog() : BookMarkFeature()
 #ifdef USE_THUMBNAILS
 		, FileDialogThumbnail()
-#endif
-#ifdef USE_BOOKMARK
-		, FileDialogBookMark()
 #endif
 #ifdef USE_EXPLORATION_BY_KEYS
 		, FileDialogKeyExploration()
@@ -3136,16 +3132,14 @@ namespace IGFD
 		if (prBookmarkPaneShown)
 		{
 			//size.x -= prBookmarkWidth;
-			ImGui::PushID("##splitterbookmark");
 			float otherWidth = size.x - prBookmarkWidth;
-			inSplitter(true, 4.0f, &prBookmarkWidth, &otherWidth, 10.0f, 10.0f + puDLGoptionsPaneWidth, size.y);
+			ImGui::PushID("##splitterbookmark");
+			inSplitter(true, 4.0f,
+				&prBookmarkWidth, &otherWidth, 10.0f,
+				10.0f + prFileDialogInternal.puDLGoptionsPaneWidth, size.y);
 			ImGui::PopID();
 			size.x -= otherWidth;
-			std::string newPathToSet;
-			if (prDrawBookmarkPane(size, prFileDialogInternal.puFileManager, newPathToSet))
-			{
-				prFileDialogInternal.puFileManager.SetPath(prFileDialogInternal, newPathToSet);
-			}
+			prDrawBookmarkPane(prFileDialogInternal, size);
 			ImGui::SameLine();
 		}
 #endif // USE_BOOKMARK
