@@ -1821,8 +1821,6 @@ namespace IGFD
 		puNeedToExitDialog = false;
 
 #ifdef USE_DIALOG_EXIT_WITH_KEY
-		ImGuiContext& g = *GImGui;
-		bool hasNav = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
 		if (ImGui::IsKeyPressed(IGFD_EXIT_KEY))
 		{
 			// we do that here with the data's defined at the last frame
@@ -3220,8 +3218,6 @@ namespace IGFD
 		auto listViewID = ImGui::GetID("##FileDialog_fileTable");
 		if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 4, flags, vSize, 0.0f))
 		{
-			auto id = ImGui::GetItemID();
-
 			ImGui::TableSetupScrollFreeze(0, 1); // Make header always visible
 			ImGui::TableSetupColumn(fdi.puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
 			ImGui::TableSetupColumn(fdi.puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
