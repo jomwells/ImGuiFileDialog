@@ -129,6 +129,9 @@ namespace IGFD
 #ifndef drivesButtonString
 #define drivesButtonString "Drives"
 #endif // drivesButtonString
+#ifndef editPathButtonString
+#define editPathButtonString "E"
+#endif // editPathButtonString
 #ifndef searchString
 #define searchString "Search :"
 #endif // searchString
@@ -153,6 +156,9 @@ namespace IGFD
 #ifndef buttonDriveString
 #define buttonDriveString "Drives"
 #endif // buttonDriveString
+#ifndef buttonEditPathString
+#define buttonEditPathString "Edit path\nYou can also right click on path buttons"
+#endif // buttonEditPathString
 #ifndef buttonResetPathString
 #define buttonResetPathString "Reset to current directory"
 #endif // buttonResetPathString
@@ -1664,7 +1670,6 @@ namespace IGFD
 
 	void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogInternal)
 	{
-		ImGui::Text("CurrentPath : %s", prCurrentPath.c_str());
 		if (IMGUI_BUTTON(resetButtonString))
 		{
 			SetCurrentPath(".");
@@ -1683,6 +1688,15 @@ namespace IGFD
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip(buttonDriveString);
 #endif // WIN32
+
+		ImGui::SameLine();
+		
+		if (IMGUI_BUTTON(editPathButtonString))
+		{
+			puInputPathActivated = true;
+		}
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip(buttonEditPathString);
 
 		ImGui::SameLine();
 
@@ -1807,11 +1821,6 @@ namespace IGFD
 		puNeedToExitDialog = false;
 
 #ifdef USE_DIALOG_EXIT_WITH_KEY
-		ImGui::Text("puInputPathActivated : %s", puFileManager.puInputPathActivated ? "true" : "false");
-		ImGui::Text("puSearchInputIsActive : %s", puSearchManager.puSearchInputIsActive ? "true" : "false");
-		ImGui::Text("puFileInputIsActive : %s", puFileInputIsActive ? "true" : "false");
-		ImGui::Text("puFileListViewIsActive : %s", puFileListViewIsActive ? "true" : "false");
-
 		ImGuiContext& g = *GImGui;
 		bool hasNav = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
 		if (ImGui::IsKeyPressed(IGFD_EXIT_KEY))
