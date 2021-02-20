@@ -590,6 +590,7 @@ namespace IGFD
 	public:
 		std::string puSearchTag;
 		char puSearchBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
+		bool puSearchInputIsActive = false;
 
 	public:
 		void Clear();
@@ -713,14 +714,13 @@ namespace IGFD
 		bool CreateDir(const std::string& vPath);								// create a directory on the file system
 		void ComposeNewPath(std::vector<std::string>::iterator vIter);			// compose a path from the compose path widget
 		bool SetPathOnParentDirectoryIfAny();									// compose paht on parent directory
-		std::string GetCurrentPath() const;											// get the current path
+		std::string GetCurrentPath();											// get the current path
 		void SetCurrentPath(const std::string& vCurrentPath);					// set the current path
 		bool IsFileExist(const std::string& vFile);
 		void SetDefaultFileName(const std::string& vFileName);
 		bool SelectDirectory(std::shared_ptr<FileInfos> vInfos);															// enter directory 
 		void SelectFileName(const FileDialogInternal& vFileDialogInternal, std::shared_ptr<FileInfos> vInfos);		// select filename
-		void NewFrame();																								// reset events (path, drives, continue);
-
+		
 	public:
 		std::string GetResultingPath();
 		std::string GetResultingFileName(FileDialogInternal& vFileDialogInternal);
@@ -903,7 +903,8 @@ namespace IGFD
 		bool puCanWeContinue = true;// events
 		bool puOkResultToConfirm = false; // to confim if ok for OverWrite
 		bool puIsOk = false;
-
+		bool puFileInputIsActive = false; // when input text for file or directory is active
+		bool puFileListViewIsActive = false; // when list view is active
 		std::string puDLGkey;
 		std::string puDLGtitle;
 		ImGuiFileDialogFlags puDLGflags = ImGuiFileDialogFlags_None;
@@ -911,9 +912,11 @@ namespace IGFD
 		PaneFun puDLGoptionsPane = nullptr;
 		float puDLGoptionsPaneWidth = 0.0f;
 		bool puDLGmodal = false;
+		bool puNeedToExitDialog = false;
 
 	public:
 		void NewFrame();			// new frame, so maybe neded to do somethings, like reset events
+		void EndFrame();			// end frame, so maybe neded to do somethings fater all
 		void ResetForNewDialog();	// reset what is needed to reset for the openging of a new dialog
 	};
 
