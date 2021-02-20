@@ -641,44 +641,7 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	// file localization by input chat // widget flashing
-	class KeyExplorerFeature
-	{
-	public:
-		KeyExplorerFeature();
-
-#ifdef USE_EXPLORATION_BY_KEYS
-	private:
-		size_t prFlashedItem = 0;							// flash when select by char
-		float prFlashAlpha = 0.0f;							// flash when select by char
-		float prFlashAlphaAttenInSecs = 1.0f;				// fps display dependant
-		size_t prLocateFileByInputChar_lastFileIdx = 0;
-		ImWchar prLocateFileByInputChar_lastChar = 0;
-		int prLocateFileByInputChar_InputQueueCharactersSize = 0;
-		bool prLocateFileByInputChar_lastFound = false;
-
-	protected:
-		void prLocateByInputKey(FileDialogInternal& vFileDialogInternal);																							// select a file line in listview according to char key
-		bool prLocateItem_Loop(FileDialogInternal& vFileDialogInternal, ImWchar vC);																					// restrat for start of list view if not found a corresponding file
-		void prExploreWithkeys(FileDialogInternal& vFileDialogInternal);																							// select file/directory line in listview accroding to up/down enter/backspace keys
-		bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
-			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
-			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
-		void prStartFlashItem(size_t vIdx);																					// define than an item must be flashed
-		bool prBeginFlashItem(size_t vIdx);																					// start the flashing of a line in lsit view
-		void prEndFlashItem();																								// end the fleshing accrdoin to var prFlashAlphaAttenInSecs
-
-	public:
-		void SetFlashingAttenuationInSeconds(						// set the flashing time of the line in file list when use exploration keys
-			float vAttenValue);										// set the attenuation (from flashed to not flashed) in seconds
-#endif // USE_EXPLORATION_BY_KEYS
-	};
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	class FileManager : public KeyExplorerFeature
+	class FileManager
 	{
 	public: // types
 		enum class SortingFieldEnum				// sorting for filetering of the file lsit
@@ -879,6 +842,43 @@ namespace IGFD
 		void DeserializeBookmarks(									// deserialize bookmarks : load bookmar buffer to load in the dialog (saved from previous use with SerializeBookmarks())
 			const std::string& vBookmarks);							// bookmark buffer to load
 #endif // USE_BOOKMARK
+	};
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	// file localization by input chat // widget flashing
+	class KeyExplorerFeature
+	{
+	public:
+		KeyExplorerFeature();
+
+#ifdef USE_EXPLORATION_BY_KEYS
+	private:
+		size_t prFlashedItem = 0;							// flash when select by char
+		float prFlashAlpha = 0.0f;							// flash when select by char
+		float prFlashAlphaAttenInSecs = 1.0f;				// fps display dependant
+		size_t prLocateFileByInputChar_lastFileIdx = 0;
+		ImWchar prLocateFileByInputChar_lastChar = 0;
+		int prLocateFileByInputChar_InputQueueCharactersSize = 0;
+		bool prLocateFileByInputChar_lastFound = false;
+
+	protected:
+		void prLocateByInputKey(FileDialogInternal& vFileDialogInternal);																							// select a file line in listview according to char key
+		bool prLocateItem_Loop(FileDialogInternal& vFileDialogInternal, ImWchar vC);																					// restrat for start of list view if not found a corresponding file
+		void prExploreWithkeys(FileDialogInternal& vFileDialogInternal, ImGuiID vListViewID);																							// select file/directory line in listview accroding to up/down enter/backspace keys
+		bool prFlashableSelectable(																					// custom flashing selectable widgets, for flash the selected line in a short time
+			const char* label, bool selected = false, ImGuiSelectableFlags flags = 0,
+			bool vFlashing = false, const ImVec2& size = ImVec2(0, 0));
+		void prStartFlashItem(size_t vIdx);																					// define than an item must be flashed
+		bool prBeginFlashItem(size_t vIdx);																					// start the flashing of a line in lsit view
+		void prEndFlashItem();																								// end the fleshing accrdoin to var prFlashAlphaAttenInSecs
+
+	public:
+		void SetFlashingAttenuationInSeconds(						// set the flashing time of the line in file list when use exploration keys
+			float vAttenValue);										// set the attenuation (from flashed to not flashed) in seconds
+#endif // USE_EXPLORATION_BY_KEYS
 	};
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -2241,105 +2241,138 @@ namespace IGFD
 		}
 	}
 
-	void IGFD::KeyExplorerFeature::prExploreWithkeys(FileDialogInternal& vFileDialogInternal)
+	void IGFD::KeyExplorerFeature::prExploreWithkeys(FileDialogInternal& vFileDialogInternal, ImGuiID vListViewID)
 	{
-		ImGuiContext& g = *GImGui;
 		auto& fdi = vFileDialogInternal.puFileManager;
-		if (!g.ActiveId && !fdi.IsFilteredListEmpty())
+		if (!fdi.IsFilteredListEmpty())
 		{
-			auto countFiles = fdi.GetFilteredListSize();
+			bool canWeExplore = false;
+			bool hasNav = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
 			
-			// explore
-			bool exploreByKey = false;
-			bool enterInDirectory = false;
-			bool exitDirectory = false;
-			if (ImGui::IsKeyPressed(IGFD_KEY_UP))
-			{
-				exploreByKey = true;
-				if (prLocateFileByInputChar_lastFileIdx > 0)
-					prLocateFileByInputChar_lastFileIdx--;
-			}
-			else if (ImGui::IsKeyPressed(IGFD_KEY_DOWN))
-			{
-				exploreByKey = true;
-				if (prLocateFileByInputChar_lastFileIdx < countFiles - 1U)
-					prLocateFileByInputChar_lastFileIdx++;
-			}
-			else if (ImGui::IsKeyReleased(IGFD_KEY_ENTER))
-			{
-				exploreByKey = true;
-				enterInDirectory = true;
-			}
-			else if (ImGui::IsKeyReleased(IGFD_KEY_BACKSPACE))
-			{
-				exploreByKey = true;
-				exitDirectory = true;
-			}
+			ImGuiContext& g = *GImGui;
+			if (!hasNav && !g.ActiveId) // no nav and no activated inputs
+				canWeExplore = true;
 
-			if (exploreByKey)
+			if (g.NavId && g.NavId == vListViewID)
 			{
-				//float totalHeight = prFilteredFileList.size() * ImGui::GetTextLineHeightWithSpacing();
-				float p = (float)((double)prLocateFileByInputChar_lastFileIdx / (double)(countFiles -1U)) * ImGui::GetScrollMaxY();// seems not udpated in tables version outside tables
-				//float p = ((float)locateFileByInputChar_lastFileIdx) * ImGui::GetTextLineHeightWithSpacing();
-				ImGui::SetScrollY(p);
-				prStartFlashItem(prLocateFileByInputChar_lastFileIdx);
-
-				auto infos = fdi.GetFilteredFileAt(prLocateFileByInputChar_lastFileIdx);
-				if (infos.use_count())
+				if (ImGui::IsKeyPressedMap(ImGuiKey_Enter) ||
+					ImGui::IsKeyPressedMap(ImGuiKey_KeyPadEnter))
 				{
-					if (infos->fileType == 'd')
+					ImGui::ActivateItem(vListViewID);
+					ImGui::SetActiveID(vListViewID, g.CurrentWindow);
+				}
+			}
+			
+			if (vListViewID == g.LastActiveId-1) // if listview id is the last acticated nav id (ImGui::ActivateItem(vListViewID);)
+				canWeExplore = true;
+
+			if (canWeExplore)
+			{
+				if (ImGui::IsKeyPressedMap(ImGuiKey_Escape))
+				{
+					ImGui::ClearActiveID();
+					g.LastActiveId = 0;
+				}
+
+				auto countFiles = fdi.GetFilteredListSize();
+
+				// explore
+				bool exploreByKey = false;
+				bool enterInDirectory = false;
+				bool exitDirectory = false;
+
+				if (ImGui::IsKeyPressed(IGFD_KEY_UP))
+				{
+					exploreByKey = true;
+					if (prLocateFileByInputChar_lastFileIdx > 0)
+						prLocateFileByInputChar_lastFileIdx--;
+					else
+						prLocateFileByInputChar_lastFileIdx = countFiles - 1U;
+				}
+				else if (ImGui::IsKeyPressed(IGFD_KEY_DOWN))
+				{
+					exploreByKey = true;
+					if (prLocateFileByInputChar_lastFileIdx < countFiles - 1U)
+						prLocateFileByInputChar_lastFileIdx++;
+					else
+						prLocateFileByInputChar_lastFileIdx = 0U;
+				}
+				else if (ImGui::IsKeyReleased(IGFD_KEY_ENTER))
+				{
+					exploreByKey = true;
+					enterInDirectory = true;
+				}
+				else if (ImGui::IsKeyReleased(IGFD_KEY_BACKSPACE))
+				{
+					exploreByKey = true;
+					exitDirectory = true;
+				}
+
+				if (exploreByKey)
+				{
+					//float totalHeight = prFilteredFileList.size() * ImGui::GetTextLineHeightWithSpacing();
+					float p = (float)((double)prLocateFileByInputChar_lastFileIdx / (double)(countFiles - 1U)) * ImGui::GetScrollMaxY();// seems not udpated in tables version outside tables
+					//float p = ((float)locateFileByInputChar_lastFileIdx) * ImGui::GetTextLineHeightWithSpacing();
+					ImGui::SetScrollY(p);
+					prStartFlashItem(prLocateFileByInputChar_lastFileIdx);
+
+					auto infos = fdi.GetFilteredFileAt(prLocateFileByInputChar_lastFileIdx);
+					if (infos.use_count())
 					{
-						if (!fdi.puDLGDirectoryMode || enterInDirectory)
+						if (infos->fileType == 'd')
 						{
-							if (enterInDirectory)
+							if (!fdi.puDLGDirectoryMode || enterInDirectory)
 							{
-								if (fdi.SelectDirectory(infos))
+								if (enterInDirectory)
 								{
-									// changement de repertoire
-									vFileDialogInternal.puFileManager.OpenCurrentPath(vFileDialogInternal);
-									if (prLocateFileByInputChar_lastFileIdx > countFiles - 1U)
+									if (fdi.SelectDirectory(infos))
 									{
-										prLocateFileByInputChar_lastFileIdx = 0;
+										// changement de repertoire
+										vFileDialogInternal.puFileManager.OpenCurrentPath(vFileDialogInternal);
+										if (prLocateFileByInputChar_lastFileIdx > countFiles - 1U)
+										{
+											prLocateFileByInputChar_lastFileIdx = 0;
+										}
 									}
 								}
 							}
+							else // directory chooser
+							{
+								fdi.SelectFileName(vFileDialogInternal, infos);
+							}
 						}
-						else // directory chooser
+						else
 						{
 							fdi.SelectFileName(vFileDialogInternal, infos);
 						}
-					}
-					else
-					{
-						fdi.SelectFileName(vFileDialogInternal, infos);
-					}
 
-					if (exitDirectory)
-					{
-						auto nfo = std::make_shared<FileInfos>();
-						nfo->fileName = "..";
+						if (exitDirectory)
+						{
+							auto nfo = std::make_shared<FileInfos>();
+							nfo->fileName = "..";
 
-						if (fdi.SelectDirectory(nfo))
-						{
-							// changement de repertoire
-							vFileDialogInternal.puFileManager.OpenCurrentPath(vFileDialogInternal);
-							if (prLocateFileByInputChar_lastFileIdx > countFiles - 1U)
+							if (fdi.SelectDirectory(nfo))
 							{
-								prLocateFileByInputChar_lastFileIdx = 0;
-							}
-						}
-#ifdef WIN32
-						else
-						{
-							if (fdi.GetComposerSize() == 1U)
-							{
-								if (fdi.GetDrives())
+								// changement de repertoire
+								vFileDialogInternal.puFileManager.OpenCurrentPath(vFileDialogInternal);
+								if (prLocateFileByInputChar_lastFileIdx > countFiles - 1U)
 								{
-									fdi.ApplyFilteringOnFileList(vFileDialogInternal);
+									prLocateFileByInputChar_lastFileIdx = 0;
 								}
 							}
-						}
+#ifdef WIN32
+							else
+							{
+								if (fdi.GetComposerSize() == 1U)
+								{
+									if (fdi.GetDrives())
+									{
+										fdi.ApplyFilteringOnFileList(vFileDialogInternal);
+									}
+								}
+							}
 #endif // WIN32
+						}
 					}
 				}
 			}
@@ -3099,179 +3132,174 @@ namespace IGFD
 	void IGFD::FileDialog::prDrawFileListView(ImVec2 vSize)
 	{
 		auto& fdi = prFileDialogInternal.puFileManager;
-		
+
 		ImGui::PushID(this);
-		auto id = ImGui::GetID("##FileDialog_FileList");
-		ImGui::BeginChild(id, vSize);
-		ImGuiContext& g = *GImGui;
-		if (ImGui::FocusableItemRegister(g.CurrentWindow, id))
+		auto listViewID = ImGui::GetID("##FileDialog_FileList");
+		if (ImGui::BeginChild(listViewID, vSize))
 		{
-			IM_DEBUG_BREAK();
-		}
-		
-		static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
-			ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
-			ImGuiTableFlags_NoHostExtendY
+			static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
+				ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
+				ImGuiTableFlags_NoHostExtendY
 #ifndef USE_CUSTOM_SORTING_ICON
-			| ImGuiTableFlags_Sortable
+				| ImGuiTableFlags_Sortable
 #endif // USE_CUSTOM_SORTING_ICON
-			;
-		if (ImGui::BeginTable("##fileTable", 4, flags, vSize))
-		{
-			ImGui::TableSetupScrollFreeze(0, 1); // Make header always visible
-			ImGui::TableSetupColumn(fdi.puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
-			ImGui::TableSetupColumn(fdi.puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
-			ImGui::TableSetupColumn(fdi.puHeaderFileSize.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 2);
-			ImGui::TableSetupColumn(fdi.puHeaderFileDate.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 3);
+				;
+			if (ImGui::BeginTable("##fileTable", 4, flags, vSize))
+			{
+				ImGui::TableSetupScrollFreeze(0, 1); // Make header always visible
+				ImGui::TableSetupColumn(fdi.puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
+				ImGui::TableSetupColumn(fdi.puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
+				ImGui::TableSetupColumn(fdi.puHeaderFileSize.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 2);
+				ImGui::TableSetupColumn(fdi.puHeaderFileDate.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 3);
 
 #ifndef USE_CUSTOM_SORTING_ICON
-			// Sort our data if sort specs have been changed!
-			if (ImGuiTableSortSpecs* sorts_specs = ImGui::TableGetSortSpecs())
-			{
-				if (sorts_specs->SpecsDirty && !fdi.IsFileListEmpty())
+				// Sort our data if sort specs have been changed!
+				if (ImGuiTableSortSpecs* sorts_specs = ImGui::TableGetSortSpecs())
 				{
-					if (sorts_specs->Specs->ColumnUserID == 0)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
-					else if (sorts_specs->Specs->ColumnUserID == 1)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
-					else if (sorts_specs->Specs->ColumnUserID == 2)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
-					else //if (sorts_specs->Specs->ColumnUserID == 3) => alwayd true for the moment, to uncomment if we add a fourth column
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
-
-					sorts_specs->SpecsDirty = false;
-				}
-			}
-
-			ImGui::TableHeadersRow();
-#else // USE_CUSTOM_SORTING_ICON
-			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
-			for (int column = 0; column < 4; column++)
-			{
-				ImGui::TableSetColumnIndex(column);
-				const char* column_name = ImGui::TableGetColumnName(column); // Retrieve name passed to TableSetupColumn()
-				ImGui::PushID(column);
-				ImGui::TableHeader(column_name);
-				ImGui::PopID();
-				if (ImGui::IsItemClicked())
-				{
-					if (column == 0)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
-					else if (column == 1)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
-					else if (column == 2)
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
-					else //if (column == 3) => alwayd true for the moment, to uncomment if we add a fourth column
-						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
-				}
-			}
-#endif // USE_CUSTOM_SORTING_ICON
-			if (!fdi.IsFilteredListEmpty())
-			{
-				prFileListClipper.Begin((int)fdi.GetFilteredListSize(), ImGui::GetTextLineHeightWithSpacing());
-				while (prFileListClipper.Step())
-				{
-					for (int i = prFileListClipper.DisplayStart; i < prFileListClipper.DisplayEnd; i++)
+					if (sorts_specs->SpecsDirty && !fdi.IsFileListEmpty())
 					{
-						if (i < 0) continue;
+						if (sorts_specs->Specs->ColumnUserID == 0)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
+						else if (sorts_specs->Specs->ColumnUserID == 1)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
+						else if (sorts_specs->Specs->ColumnUserID == 2)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
+						else //if (sorts_specs->Specs->ColumnUserID == 3) => alwayd true for the moment, to uncomment if we add a fourth column
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
 
-						auto infos = fdi.GetFilteredFileAt((size_t)i);
-						if (!infos.use_count())
-							continue;
-
-						ImVec4 c;
-						std::string icon;
-						bool showColor = prFileDialogInternal.puFilterManager.GetExtentionInfos(infos->fileExt, &c, &icon);
-						if (showColor)
-							ImGui::PushStyleColor(ImGuiCol_Text, c);
-
-						std::string str = " " + infos->fileName;
-						if (infos->fileType == 'd') str = dirEntryString + str;
-						else if (infos->fileType == 'l') str = linkEntryString + str;
-						else if (infos->fileType == 'f')
-						{
-							if (showColor && !icon.empty())
-								str = icon + str;
-							else
-								str = fileEntryString + str;
-						}
-						bool selected = fdi.IsFileNameSelected(infos->fileName); // found
-
-						ImGui::TableNextRow();
-
-						bool needToBreakTheloop = false;
-
-						if (ImGui::TableNextColumn()) // file name
-						{
-							needToBreakTheloop = prSelectableItem(i, infos, selected, str.c_str());
-						}
-						if (ImGui::TableNextColumn()) // file type
-						{
-							ImGui::Text("%s", infos->fileExt.c_str());
-						}
-						if (ImGui::TableNextColumn()) // file size
-						{
-							if (infos->fileType != 'd')
-							{
-								ImGui::Text("%s ", infos->formatedFileSize.c_str());
-							}
-							else
-							{
-								ImGui::Text("");
-							}
-						}
-						if (ImGui::TableNextColumn()) // file date + time
-						{
-							ImGui::Text("%s", infos->fileModifDate.c_str());
-						}
-
-						if (showColor)
-							ImGui::PopStyleColor();
-
-						if (needToBreakTheloop)
-							break;
+						sorts_specs->SpecsDirty = false;
 					}
 				}
-				prFileListClipper.End();
-			}
 
-			if (fdi.puInputPathActivated)
-			{
-				auto gio = ImGui::GetIO();
-				if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Enter]))
+				ImGui::TableHeadersRow();
+#else // USE_CUSTOM_SORTING_ICON
+				ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+				for (int column = 0; column < 4; column++)
 				{
-					fdi.SetCurrentPath(std::string(fdi.puInputPathBuffer));
-					fdi.OpenCurrentPath(prFileDialogInternal);
-					fdi.puInputPathActivated = false;
+					ImGui::TableSetColumnIndex(column);
+					const char* column_name = ImGui::TableGetColumnName(column); // Retrieve name passed to TableSetupColumn()
+					ImGui::PushID(column);
+					ImGui::TableHeader(column_name);
+					ImGui::PopID();
+					if (ImGui::IsItemClicked())
+					{
+						if (column == 0)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
+						else if (column == 1)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
+						else if (column == 2)
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
+						else //if (column == 3) => alwayd true for the moment, to uncomment if we add a fourth column
+							fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
+					}
 				}
-				if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Escape]))
+#endif // USE_CUSTOM_SORTING_ICON
+				if (!fdi.IsFilteredListEmpty())
 				{
-					fdi.puInputPathActivated = false;
+					prFileListClipper.Begin((int)fdi.GetFilteredListSize(), ImGui::GetTextLineHeightWithSpacing());
+					while (prFileListClipper.Step())
+					{
+						for (int i = prFileListClipper.DisplayStart; i < prFileListClipper.DisplayEnd; i++)
+						{
+							if (i < 0) continue;
+
+							auto infos = fdi.GetFilteredFileAt((size_t)i);
+							if (!infos.use_count())
+								continue;
+
+							ImVec4 c;
+							std::string icon;
+							bool showColor = prFileDialogInternal.puFilterManager.GetExtentionInfos(infos->fileExt, &c, &icon);
+							if (showColor)
+								ImGui::PushStyleColor(ImGuiCol_Text, c);
+
+							std::string str = " " + infos->fileName;
+							if (infos->fileType == 'd') str = dirEntryString + str;
+							else if (infos->fileType == 'l') str = linkEntryString + str;
+							else if (infos->fileType == 'f')
+							{
+								if (showColor && !icon.empty())
+									str = icon + str;
+								else
+									str = fileEntryString + str;
+							}
+							bool selected = fdi.IsFileNameSelected(infos->fileName); // found
+
+							ImGui::TableNextRow();
+
+							bool needToBreakTheloop = false;
+
+							if (ImGui::TableNextColumn()) // file name
+							{
+								needToBreakTheloop = prSelectableItem(i, infos, selected, str.c_str());
+							}
+							if (ImGui::TableNextColumn()) // file type
+							{
+								ImGui::Text("%s", infos->fileExt.c_str());
+							}
+							if (ImGui::TableNextColumn()) // file size
+							{
+								if (infos->fileType != 'd')
+								{
+									ImGui::Text("%s ", infos->formatedFileSize.c_str());
+								}
+								else
+								{
+									ImGui::Text("");
+								}
+							}
+							if (ImGui::TableNextColumn()) // file date + time
+							{
+								ImGui::Text("%s", infos->fileModifDate.c_str());
+							}
+
+							if (showColor)
+								ImGui::PopStyleColor();
+
+							if (needToBreakTheloop)
+								break;
+						}
+					}
+					prFileListClipper.End();
 				}
-			}
+
+				if (fdi.puInputPathActivated)
+				{
+					auto gio = ImGui::GetIO();
+					if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Enter]))
+					{
+						fdi.SetCurrentPath(std::string(fdi.puInputPathBuffer));
+						fdi.OpenCurrentPath(prFileDialogInternal);
+						fdi.puInputPathActivated = false;
+					}
+					if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Escape]))
+					{
+						fdi.puInputPathActivated = false;
+					}
+				}
 #ifdef USE_EXPLORATION_BY_KEYS
-			else
-			{
-				prLocateByInputKey(prFileDialogInternal);
-				prExploreWithkeys(prFileDialogInternal);
-			}
+				else
+				{
+					prLocateByInputKey(prFileDialogInternal);
+					prExploreWithkeys(prFileDialogInternal, listViewID);
+				}
 #endif // USE_EXPLORATION_BY_KEYS
-			ImGui::EndTable();
-		}
-		// changement de repertoire
-		if (fdi.puPathClicked)
-		{
-			fdi.OpenCurrentPath(prFileDialogInternal);
-		}
-
-		if (fdi.puDrivesClicked)
-		{
-			if (fdi.GetDrives())
+				ImGui::EndTable();
+			}
+			// changement de repertoire
+			if (fdi.puPathClicked)
 			{
-				fdi.ApplyFilteringOnFileList(prFileDialogInternal);
+				fdi.OpenCurrentPath(prFileDialogInternal);
+			}
+
+			if (fdi.puDrivesClicked)
+			{
+				if (fdi.GetDrives())
+				{
+					fdi.ApplyFilteringOnFileList(prFileDialogInternal);
+				}
 			}
 		}
-
 		ImGui::EndChild();
 		ImGui::PopID();
 	}
