@@ -252,7 +252,7 @@ namespace IGFD
 #define IMGUI_RADIO_BUTTON inRadioButton
 #endif // IMGUI_RADIO_BUTTON
 #ifndef DisplayMode_ThumbailsList_ImageHeight 
-#define DisplayMode_ThumbailsList_ImageHeight 50.0f
+#define DisplayMode_ThumbailsList_ImageHeight 32.0f
 #endif // DisplayMode_ThumbailsList_ImageHeight
 	static IGFD::CreateTextureFun sCreateTextureFun = nullptr;
 	static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
@@ -1002,7 +1002,7 @@ namespace IGFD
 	void IGFD::FileManager::ClearFileLists()
 	{
 		prFilteredFileList.clear();
-#ifdef USE_THUMBNAILS
+/*#ifdef USE_THUMBNAILS
 		for (auto file : prFileList)
 		{
 			if (file.use_count())
@@ -1016,7 +1016,7 @@ namespace IGFD
 				}
 			}
 		}
-#endif
+#endif*/
 		prFileList.clear();
 	}
 
@@ -1101,9 +1101,6 @@ namespace IGFD
 
 				free(files);
 			}
-#ifdef USE_THUMBNAILS
-			prStartThumbnailGeneration();
-#endif
 			SortFields(vFileDialogInternal, puSortingField, false);
 		}
 	}
@@ -1810,8 +1807,8 @@ namespace IGFD
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
-	
-	void FileDialogInternal::NewFrame()
+
+	void IGFD::FileDialogInternal::NewFrame()
 	{
 		puCanWeContinue = true;	// reset flag for possibily validate the dialog
 		puIsOk = false;				// reset dialog result
@@ -1821,8 +1818,6 @@ namespace IGFD
 		puNeedToExitDialog = false;
 
 #ifdef USE_DIALOG_EXIT_WITH_KEY
-		ImGuiContext& g = *GImGui;
-		bool hasNav = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard);
 		if (ImGui::IsKeyPressed(IGFD_EXIT_KEY))
 		{
 			// we do that here with the data's defined at the last frame
@@ -1845,7 +1840,7 @@ namespace IGFD
 		}
 	}
 
-	void FileDialogInternal::EndFrame()
+	void IGFD::FileDialogInternal::EndFrame()
 	{
 		// changement de repertoire
 		if (puFileManager.puPathClicked)
@@ -1877,7 +1872,7 @@ namespace IGFD
 		}
 	}
 
-	void FileDialogInternal::ResetForNewDialog()
+	void IGFD::FileDialogInternal::ResetForNewDialog()
 	{
 	
 	}
@@ -1886,121 +1881,173 @@ namespace IGFD
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef USE_THUMBNAILS
-	IGFD::FileDialogThumbnail::FileDialogThumbnail()
+	IGFD::ThumbnailFeature::ThumbnailFeature()
 	{
+#ifdef USE_THUMBNAILS
 		prDisplayMode = DisplayModeEnum::FILE_LIST;
+#endif
 	}
-	IGFD::FileDialogThumbnail::~FileDialogThumbnail()
+
+	IGFD::ThumbnailFeature::~ThumbnailFeature()
 	{
 
 	}
-	void IGFD::FileDialogThumbnail::prStartThumbnailGeneration()
+
+	void IGFD::ThumbnailFeature::NewThumbnailFrame()
 	{
-		if (!prStopThumbnailGeneration())
+#ifdef USE_THUMBNAILS
+		prStartTextureFileDatasExtraction();
+#endif
+	}
+
+	void IGFD::ThumbnailFeature::EndThumbnailFrame()
+	{
+
+	}
+
+	void IGFD::ThumbnailFeature::QuitThumbnailFrame()
+	{
+#ifdef USE_THUMBNAILS
+		prStopTextureFileDatasExtraction();
+		prClearThumbnails();
+#endif
+	}
+
+#ifdef USE_THUMBNAILS
+	void IGFD::ThumbnailFeature::prStartTextureFileDatasExtraction()
+	{
+		const bool res = prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable();
+		if (!res)
 		{
 			prIsWorking = true;
 			prCountFiles = 0U;
-			prThumbnailGenerationThread = std::make_shared<std::thread>(&IGFD::FileDialogThumbnail::prThumbnailGenerationThreadFunc, this);
+			prThumbnailGenerationThread = std::shared_ptr<std::thread>(
+				new std::thread(&IGFD::ThumbnailFeature::prThreadTextureFileDatasExtractionFunc, this), 
+				[this](std::thread* obj)
+				{
+					prIsWorking = false;
+					if (obj)
+						obj->join();
+				});
 		}
 	}
-	bool IGFD::FileDialogThumbnail::prStopThumbnailGeneration()
+
+	bool IGFD::ThumbnailFeature::prStopTextureFileDatasExtraction()
 	{
 		const bool res = prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable();
-
 		if (res)
 		{
-			prIsWorking = false;
-			prThumbnailGenerationThread->join();
 			prThumbnailGenerationThread.reset();
 		}
 
 		return res;
 	}
-	void IGFD::FileDialogThumbnail::prThumbnailGenerationThreadFunc()
+	
+	void IGFD::ThumbnailFeature::prThreadTextureFileDatasExtractionFunc()
 	{
 		prCountFiles = 0U;
 		prIsWorking = true;
 
 		int max_conurent_thread = 2;
-		for (auto file : prFilesTextureToLoad)
+
+		// infinite loop while is thread working
+		while(prIsWorking)
 		{
-			if (!prIsWorking)
-				break;
-
-			if (!file.use_count())
-				continue;
-
-			if (file->fileType == 'f')
+			if (!prTextureFileDatasToGet.empty())
 			{
-				if (file->fileExt == ".png"
-					|| file->fileExt == ".bmp"
-					|| file->fileExt == ".tga"
-					|| file->fileExt == ".jpg" || file->fileExt == ".jpeg"
-					|| file->fileExt == ".gif"
-					|| file->fileExt == ".psd"
-					|| file->fileExt == ".pic"
-					|| file->fileExt == ".ppm" || file->fileExt == ".pgm"
-					//|| file->fileExt == ".hdr" => format float so in few times
-					)
+				std::shared_ptr<FileInfos> file = nullptr;
+				prTextureFileDatasToGetMutex.lock();
+				//get the first file in the list
+				if (!prTextureFileDatasToGet.empty())
+					file = (*prTextureFileDatasToGet.begin());
+				prTextureFileDatasToGetMutex.unlock();
+
+				// retrieve datas of the texture file if its an image file
+				if (file.use_count())
 				{
-					auto fpn = file->filePath + PATH_SEP + file->fileName;
-
-					int w = 0;
-					int h = 0;
-					int chans = 0;
-					auto datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb);
-					if (datas != 0 && (chans == 4 || chans == 2))
+					if (file->fileType == 'f')
 					{
-						stbi_image_free(datas);
-						datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb_alpha);
-					}
-					if (datas)
-					{
-						if (w && h && chans)
+						if (file->fileExt == ".png"
+							|| file->fileExt == ".bmp"
+							|| file->fileExt == ".tga"
+							|| file->fileExt == ".jpg" || file->fileExt == ".jpeg"
+							|| file->fileExt == ".gif"
+							|| file->fileExt == ".psd"
+							|| file->fileExt == ".pic"
+							|| file->fileExt == ".ppm" || file->fileExt == ".pgm"
+							//|| file->fileExt == ".hdr" => format float so in few times
+							)
 						{
-							// resize
-							const int newWidth = DisplayMode_ThumbailsList_ImageHeight;
-							const int newHeight = DisplayMode_ThumbailsList_ImageHeight;
-							const int newBufSize = newWidth * newHeight * chans;
-							auto resizedData = new uint8_t[newBufSize];
-							const int resizeRes = stbir_resize_uint8(
-								datas, w, h, w * chans,
-								resizedData, newWidth, newHeight, newWidth * chans,
-								chans);
+							auto fpn = file->filePath + PATH_SEP + file->fileName;
 
-							if (resizeRes)
+							int w = 0;
+							int h = 0;
+							int chans = 0;
+							uint8_t *datas = stbi_load(fpn.c_str(), &w, &h, &chans, STBI_rgb_alpha);
+							if (datas)
 							{
-								file->thumbnailInfo.textureDatas = resizedData;
-								file->thumbnailInfo.textureWidth = newWidth;
-								file->thumbnailInfo.textureHeight = newHeight;
-								file->thumbnailInfo.textureChannels = chans;
+								if (w && h)
+								{
+									// resize with respect to glyph ratio
+									float ratioX = (float)w / (float)h;
+									float newX = DisplayMode_ThumbailsList_ImageHeight * ratioX;
+									float newY = w / ratioX;
+									if (newX < w) 
+										newY = DisplayMode_ThumbailsList_ImageHeight;
 
-								// we set that at least, because will launch the gpu creation of the texture in the main thread
-								file->thumbnailInfo.isReadyToUpload = true;
-							}
-						}
-						else
-						{
-							printf("image loading fail : w:%i h:%i c:%i\n", w, h, chans);
+									const int newWidth = newX;
+									const int newHeight = newY;
+									const size_t newBufSize = newWidth * newHeight * 4;
+									auto resizedData = new uint8_t[newBufSize];
+									
+									const int resizeSucceeded = stbir_resize_uint8(
+										datas, w, h, 0,
+										resizedData, newWidth, newHeight, 0,
+										4);
+
+									if (resizeSucceeded)
+									{
+										file->thumbnailInfo.textureFileDatas = resizedData;
+										file->thumbnailInfo.textureWidth = newWidth;
+										file->thumbnailInfo.textureHeight = newHeight;
+										file->thumbnailInfo.textureChannels = 4;
+
+										// we set that at least, because will launch the gpu creation of the texture in the main thread
+										file->thumbnailInfo.isReadyToUpload = true;
+
+										// need gpu loading
+										prAddTextureToCreate(file);
+									}
+								}
+								else
+								{
+									printf("image loading fail : w:%i h:%i c:%i\n", w, h, 4);
 #ifdef _MSC_VER
-							if (IsDebuggerPresent())
-							{
-								__debugbreak;
-							}
+									if (IsDebuggerPresent())
+									{
+										__debugbreak;
+									}
 #endif
+								}
+
+								stbi_image_free(datas);
+							}
 						}
 					}
 
-					stbi_image_free(datas);
+					// peu importe le resultat on vire le fichicer
+					// remove form this list
+					// write => thread concurency issues
+					prTextureFileDatasToGetMutex.lock();
+					prTextureFileDatasToGet.pop_front();
+					prTextureFileDatasToGetMutex.unlock();
 				}
 			}
-
-			prCountFiles++;
 		}
 
 		prIsWorking = false;
 	}
+
 	inline void inVariadicProgressBar(float fraction, const ImVec2& size_arg, const char* fmt, ...)
 	{
 		va_list args;
@@ -2013,44 +2060,70 @@ namespace IGFD
 			ImGui::ProgressBar(fraction, size_arg, TempBuffer);
 		}
 	}
-	void IGFD::FileDialogThumbnail::prDrawThumbnailGenerationProgress()
+
+	void IGFD::ThumbnailFeature::prDrawThumbnailGenerationProgress()
 	{
 		if (prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable())
 		{
-			if (!prIsWorking)
+			if (!prTextureFileDatasToGet.empty())
 			{
-				prThumbnailGenerationThread->join();
-				prFinalizeThumbnailGeneration();
-			}
-			else
-			{
-				const float p = (float)((double)prCountFiles / (double)prFilesTextureToLoad.size());
-				inVariadicProgressBar(p, ImVec2(50, 0), "%u/%u", prCountFiles, (uint32_t)prFilesTextureToLoad.size());
+				const float p = (float)((double)prCountFiles / (double)prTextureFileDatasToGet.size()); // read => no thread concurency issues
+				inVariadicProgressBar(p, ImVec2(50, 0), "%u/%u", prCountFiles, (uint32_t)prTextureFileDatasToGet.size()); // read => no thread concurency issues
 				ImGui::SameLine();
 			}
 		}
 	}
-	void IGFD::FileDialogThumbnail::prFinalizeThumbnailGeneration()
+
+	void IGFD::ThumbnailFeature::prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos)
 	{
-		for (auto file : prFilesTextureToLoad)
+		if (vFileInfos.use_count())
 		{
-			if (!prIsWorking)
-				break;
-
-			if (!file.use_count())
-				continue;
-
-			if (file->thumbnailInfo.textureDatas)
+			if (vFileInfos->fileType == 'f')
 			{
-				delete[] file->thumbnailInfo.textureDatas;
+				if (vFileInfos->fileExt == ".png"
+					|| vFileInfos->fileExt == ".bmp"
+					|| vFileInfos->fileExt == ".tga"
+					|| vFileInfos->fileExt == ".jpg" || vFileInfos->fileExt == ".jpeg"
+					|| vFileInfos->fileExt == ".gif"
+					|| vFileInfos->fileExt == ".psd"
+					|| vFileInfos->fileExt == ".pic"
+					|| vFileInfos->fileExt == ".ppm" || vFileInfos->fileExt == ".pgm"
+					//|| file->fileExt == ".hdr" => format float so in few times
+					)
+				{
+					// write => thread concurency issues
+					prTextureFileDatasToGetMutex.lock();
+					prTextureFileDatasToGet.push_back(vFileInfos);
+					vFileInfos->thumbnailInfo.isLoadingOrLoaded = true;
+					prTextureFileDatasToGetMutex.unlock();
+				}
 			}
 		}
 	}
-	void IGFD::FileDialogThumbnail::prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos)
+	
+	void IGFD::ThumbnailFeature::prAddTextureToCreate(std::shared_ptr<FileInfos> vFileInfos)
 	{
-
+		if (vFileInfos.use_count())
+		{
+			// write => thread concurency issues
+			prTextureToCreateMutex.lock();
+			prTextureToCreate.push_back(vFileInfos);
+			prTextureToCreateMutex.unlock();
+		}
 	}
-	void IGFD::FileDialogThumbnail::prDrawDisplayModeToolBar()
+
+	void IGFD::ThumbnailFeature::prAddTextureToDestroy(std::shared_ptr<FileInfos> vFileInfos)
+	{
+		if (vFileInfos.use_count())
+		{
+			// write => thread concurency issues
+			prTextureToDestroyMutex.lock();
+			prTextureToDestroy.push_back(vFileInfos);
+			prTextureToDestroyMutex.unlock();
+		}
+	}
+
+	void IGFD::ThumbnailFeature::prDrawDisplayModeToolBar()
 	{
 		if (IMGUI_RADIO_BUTTON(DisplayMode_FilesList_ButtonString,
 			prDisplayMode == DisplayModeEnum::FILE_LIST))
@@ -2058,22 +2131,78 @@ namespace IGFD
 		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_FilesList_ButtonHelp);
 		ImGui::SameLine();
 		if (IMGUI_RADIO_BUTTON(DisplayMode_ThumbailsList_ButtonString,
-			prDisplayMode == DisplayModeEnum::THUMBAILS_LIST))
-			prDisplayMode = DisplayModeEnum::THUMBAILS_LIST;
+			prDisplayMode == DisplayModeEnum::THUMBNAILS_LIST))
+			prDisplayMode = DisplayModeEnum::THUMBNAILS_LIST;
 		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsList_ButtonHelp);
 		ImGui::SameLine();
 		if (IMGUI_RADIO_BUTTON(DisplayMode_ThumbailsSmall_ButtonString,
-			prDisplayMode == DisplayModeEnum::SMALL_THUMBAILS))
-			prDisplayMode = DisplayModeEnum::SMALL_THUMBAILS;
+			prDisplayMode == DisplayModeEnum::THUMBNAILS_GRID))
+			prDisplayMode = DisplayModeEnum::THUMBNAILS_GRID;
 		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsSmall_ButtonHelp);
-		ImGui::SameLine();
-		if (IMGUI_RADIO_BUTTON(DisplayMode_ThumbailsBig_ButtonString,
-			prDisplayMode == DisplayModeEnum::BIG_THUMBAILS))
-			prDisplayMode = DisplayModeEnum::BIG_THUMBAILS;
-		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsBig_ButtonHelp);
 		ImGui::SameLine();
 		prDrawThumbnailGenerationProgress();
 	}
+
+	void IGFD::ThumbnailFeature::prClearThumbnails()
+	{
+
+	}
+
+	void IGFD::ThumbnailFeature::SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun)
+	{
+		prCreateTextureFun = vCreateTextureFun;
+	}
+
+	void IGFD::ThumbnailFeature::SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun)
+	{
+		prDestroyTextureFun = vCreateTextureFun;
+	}
+
+	void IGFD::ThumbnailFeature::ManageGPUTextures()
+	{
+		if (prCreateTextureFun)
+		{
+			if (!prTextureToCreate.empty())
+			{
+				for (auto file : prTextureToCreate)
+				{
+					if (file.use_count())
+					{
+						prCreateTextureFun(&file->thumbnailInfo);
+					}
+				}
+				prTextureToCreateMutex.lock();
+				prTextureToCreate.clear();
+				prTextureToCreateMutex.unlock();
+			}
+		}
+		else
+		{
+			printf("No Callback found for create texture\nYou need to define the callback with a call to SetCreateTextureCallback\n");
+		}
+
+		if (prDestroyTextureFun)
+		{
+			if (!prTextureToDestroy.empty())
+			{
+				for (auto file : prTextureToDestroy)
+				{
+					if (file.use_count())
+					{
+						prDestroyTextureFun(&file->thumbnailInfo);
+					}
+				}
+				prTextureToDestroyMutex.lock();
+				prTextureToDestroy.clear();
+				prTextureToDestroyMutex.unlock();
+			}
+		}
+		else
+		{
+		printf("No Callback found for destroy texture\nYou need to define the callback with a call to SetCreateTextureCallback\n");
+		}
+	}
+
 #endif // USE_THUMBNAILS
 
 	/////////////////////////////////////////////////////////////////////////////////////
@@ -2638,12 +2767,7 @@ namespace IGFD
 	/////////////////////////////////////////////////////////////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////////
 
-	IGFD::FileDialog::FileDialog() : BookMarkFeature(), KeyExplorerFeature()
-#ifdef USE_THUMBNAILS
-		, FileDialogThumbnail()
-#endif
-	{}
-
+	IGFD::FileDialog::FileDialog() : BookMarkFeature(), KeyExplorerFeature(), ThumbnailFeature() {}
 	IGFD::FileDialog::~FileDialog() = default;
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2955,7 +3079,7 @@ namespace IGFD
 				fdFile.ClearFileLists();
 			}
 
-			prFileDialogInternal.NewFrame();
+			NewFrame();
 
 			ImGui::SetNextWindowSizeConstraints(vMinSize, vMaxSize);
 
@@ -3002,7 +3126,7 @@ namespace IGFD
 				prDrawContent(); // bookmark, files view, side pane 
 				res = prDrawFooter(); // file field, filter combobox, ok/cancel buttons
 
-				prFileDialogInternal.EndFrame();
+				EndFrame();
 
 				// for display in dialog center, the confirm to overwrite dlg
 				prFileDialogInternal.puDialogCenterPos = ImGui::GetCurrentWindowRead()->ContentRegionRect.GetCenter();
@@ -3024,6 +3148,22 @@ namespace IGFD
 		}
 
 		return false;
+	}
+
+	void IGFD::FileDialog::NewFrame()
+	{
+		prFileDialogInternal.NewFrame();
+		NewThumbnailFrame();
+	}
+	
+	void IGFD::FileDialog::EndFrame()
+	{
+		prFileDialogInternal.EndFrame();
+		EndThumbnailFrame();
+	}
+	void IGFD::FileDialog::QuitFrame()
+	{
+		QuitThumbnailFrame();
 	}
 
 	void IGFD::FileDialog::prDrawHeader()
@@ -3079,13 +3219,20 @@ namespace IGFD
 		}
 
 #ifdef USE_THUMBNAILS
-		if (prDisplayMode == DisplayModeEnum::FILE_LIST)
-			prFileDialogInternal.puFileManager.DrawFileListView(prFileDialogInternal, size);
-		else
-			prDrawDisplayModeView(size);
+		switch (prDisplayMode)
+		{
+		case DisplayModeEnum::FILE_LIST:
+			prDrawFileListView(size);
+			break;
+		case DisplayModeEnum::THUMBNAILS_LIST:
+			prDrawThumbnailsListView(size);
+			break;
+		case DisplayModeEnum::THUMBNAILS_GRID:
+			prDrawThumbnailsGridView(size);
+			break;
+		};
 #else
 		prDrawFileListView(size);
-
 #endif // USE_THUMBNAILS
 
 		if (prFileDialogInternal.puDLGoptionsPane)
@@ -3134,8 +3281,6 @@ namespace IGFD
 			ImGui::SameLine();
 		}
 
-
-
 		// Cancel Button
 		if (IMGUI_BUTTON(cancelButtonString "##validationdialog") || 
 			prFileDialogInternal.puNeedToExitDialog) // dialog exit asked
@@ -3166,7 +3311,7 @@ namespace IGFD
 
 		float h = 0.0f;
 #ifdef USE_THUMBNAILS
-		if (prDisplayMode == DISPLAY_MODE_THUMBAILS_LIST)
+		if (prDisplayMode == DisplayModeEnum::THUMBNAILS_LIST)
 			h = DisplayMode_ThumbailsList_ImageHeight;
 #endif // USE_THUMBNAILS
 #ifdef USE_EXPLORATION_BY_KEYS
@@ -3184,13 +3329,28 @@ namespace IGFD
 		{
 			if (vInfos->fileType == 'd')
 			{
-				if (ImGui::IsMouseDoubleClicked(0)) // 0 -> left mouse button double click
+				// nav system, selectebale cause open directory or select directory
+				if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard)
 				{
-					fdi.puPathClicked = fdi.SelectDirectory(vInfos);
+					if (fdi.puDLGDirectoryMode) // directory chooser
+					{
+						fdi.SelectFileName(prFileDialogInternal, vInfos);
+					}
+					else
+					{
+						fdi.puPathClicked = fdi.SelectDirectory(vInfos);
+					}
 				}
-				else if (fdi.puDLGDirectoryMode) // directory chooser
+				else // no nav system => classic behavior
 				{
-					fdi.SelectFileName(prFileDialogInternal, vInfos);
+					if (ImGui::IsMouseDoubleClicked(0)) // 0 -> left mouse button double click
+					{
+						fdi.puPathClicked = fdi.SelectDirectory(vInfos);
+					}
+					else if (fdi.puDLGDirectoryMode) // directory chooser
+					{
+						fdi.SelectFileName(prFileDialogInternal, vInfos);
+					}
 				}
 
 				return true; // needToBreakTheloop
@@ -3220,8 +3380,6 @@ namespace IGFD
 		auto listViewID = ImGui::GetID("##FileDialog_fileTable");
 		if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 4, flags, vSize, 0.0f))
 		{
-			auto id = ImGui::GetItemID();
-
 			ImGui::TableSetupScrollFreeze(0, 1); // Make header always visible
 			ImGui::TableSetupColumn(fdi.puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
 			ImGui::TableSetupColumn(fdi.puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
@@ -3362,7 +3520,9 @@ namespace IGFD
 #ifdef USE_THUMBNAILS
 	void IGFD::FileDialog::prDrawThumbnailsListView(ImVec2 vSize)
 	{
-		ImGui::BeginChild("##FileDialog_FileList", vSize);
+		auto& fdi = prFileDialogInternal.puFileManager;
+
+		ImGui::PushID(this);
 
 		static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
 			ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
@@ -3371,29 +3531,30 @@ namespace IGFD
 			| ImGuiTableFlags_Sortable
 #endif // USE_CUSTOM_SORTING_ICON
 			;
-		if (ImGui::BeginTable("##fileTable", 5, flags, vSize))
+		auto listViewID = ImGui::GetID("##FileDialog_fileTable");
+		if (ImGui::BeginTableEx("##FileDialog_fileTable", listViewID, 5, flags, vSize, 0.0f))
 		{
 			ImGui::TableSetupScrollFreeze(0, 1); // Make header always visible
-			ImGui::TableSetupColumn(puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
-			ImGui::TableSetupColumn(puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
-			ImGui::TableSetupColumn(puHeaderFileSize.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 2);
-			ImGui::TableSetupColumn(puHeaderFileDate.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 3);
-			ImGui::TableSetupColumn("Thumb", ImGuiTableColumnFlags_WidthFixed, -1, 4);
+			ImGui::TableSetupColumn(fdi.puHeaderFileName.c_str(), ImGuiTableColumnFlags_WidthStretch, -1, 0);
+			ImGui::TableSetupColumn(fdi.puHeaderFileType.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 1);
+			ImGui::TableSetupColumn(fdi.puHeaderFileSize.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 2);
+			ImGui::TableSetupColumn(fdi.puHeaderFileDate.c_str(), ImGuiTableColumnFlags_WidthFixed, -1, 3);
+			ImGui::TableSetupColumn("##thumbnails", ImGuiTableColumnFlags_WidthFixed, -1, 4);
 
 #ifndef USE_CUSTOM_SORTING_ICON
 			// Sort our data if sort specs have been changed!
 			if (ImGuiTableSortSpecs* sorts_specs = ImGui::TableGetSortSpecs())
 			{
-				if (sorts_specs->SpecsDirty && !prFileList.empty())
+				if (sorts_specs->SpecsDirty && !fdi.IsFileListEmpty())
 				{
 					if (sorts_specs->Specs->ColumnUserID == 0)
-						prSortFields(SortingFieldEnum::FIELD_FILENAME, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
 					else if (sorts_specs->Specs->ColumnUserID == 1)
-						prSortFields(SortingFieldEnum::FIELD_TYPE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
 					else if (sorts_specs->Specs->ColumnUserID == 2)
-						prSortFields(SortingFieldEnum::FIELD_SIZE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
 					else //if (sorts_specs->Specs->ColumnUserID == 3) => alwayd true for the moment, to uncomment if we add a fourth column
-						prSortFields(SortingFieldEnum::FIELD_DATE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
 
 					sorts_specs->SpecsDirty = false;
 				}
@@ -3412,32 +3573,35 @@ namespace IGFD
 				if (ImGui::IsItemClicked())
 				{
 					if (column == 0)
-						prSortFields(SortingFieldEnum::FIELD_FILENAME, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_FILENAME, true);
 					else if (column == 1)
-						prSortFields(SortingFieldEnum::FIELD_TYPE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_TYPE, true);
 					else if (column == 2)
-						prSortFields(SortingFieldEnum::FIELD_SIZE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_SIZE, true);
 					else //if (column == 3) => alwayd true for the moment, to uncomment if we add a fourth column
-						prSortFields(SortingFieldEnum::FIELD_DATE, true);
+						fdi.SortFields(prFileDialogInternal, IGFD::FileManager::SortingFieldEnum::FIELD_DATE, true);
 				}
 			}
 #endif // USE_CUSTOM_SORTING_ICON
-			if (!prFilteredFileList.empty())
+			if (!fdi.IsFilteredListEmpty())
 			{
-				prFileListClipper.Begin((int)prFilteredFileList.size(), ImMax(ImGui::GetTextLineHeightWithSpacing(), DisplayMode_ThumbailsList_ImageHeight));
+				ImGuiContext& g = *GImGui;
+				const float itemHeight = ImMax(g.FontSize, DisplayMode_ThumbailsList_ImageHeight) + g.Style.ItemSpacing.y;
+
+				prFileListClipper.Begin((int)fdi.GetFilteredListSize(), itemHeight);
 				while (prFileListClipper.Step())
 				{
 					for (int i = prFileListClipper.DisplayStart; i < prFileListClipper.DisplayEnd; i++)
 					{
 						if (i < 0) continue;
 
-						auto infos = prFilteredFileList[i];
+						auto infos = fdi.GetFilteredFileAt((size_t)i);
 						if (!infos.use_count())
 							continue;
 
 						ImVec4 c;
 						std::string icon;
-						bool showColor = GetExtentionInfos(infos->fileExt, &c, &icon);
+						bool showColor = prFileDialogInternal.puFilterManager.GetExtentionInfos(infos->fileExt, &c, &icon);
 						if (showColor)
 							ImGui::PushStyleColor(ImGuiCol_Text, c);
 
@@ -3451,7 +3615,7 @@ namespace IGFD
 							else
 								str = fileEntryString + str;
 						}
-						bool selected = (prSelectedFileNames.find(infos->fileName) != prSelectedFileNames.end()); // found
+						bool selected = fdi.IsFileNameSelected(infos->fileName); // found
 
 						ImGui::TableNextRow();
 
@@ -3480,20 +3644,16 @@ namespace IGFD
 						{
 							ImGui::Text("%s", infos->fileModifDate.c_str());
 						}
-						if (ImGui::TableNextColumn())
+						if (ImGui::TableNextColumn()) // file date + time
 						{
+							if (!infos->thumbnailInfo.isLoadingOrLoaded)
+							{
+								prAddTextureToLoad(infos);
+							}
 							if (infos->thumbnailInfo.isReadyToDisplay)
 							{
-								ImGui::Image((ImTextureID)infos->thumbnailInfo.textureID,
-									ImVec2(DisplayMode_ThumbailsList_ImageHeight,
-										DisplayMode_ThumbailsList_ImageHeight));
-							}
-							else if (infos->thumbnailInfo.isReadyToUpload)
-							{
-								if (prCreateTextureFun)
-								{
-									prCreateTextureFun(&infos->thumbnailInfo);
-								}
+								ImGui::Image((ImTextureID)infos->thumbnailInfo.textureID, 
+									ImVec2(infos->thumbnailInfo.textureWidth, infos->thumbnailInfo.textureHeight));
 							}
 						}
 
@@ -3507,55 +3667,35 @@ namespace IGFD
 				prFileListClipper.End();
 			}
 
-			if (puInputPathActivated)
-			{
-				auto gio = ImGui::GetIO();
-				if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Enter]))
-				{
-					prFileDialogInternal.puFileManager.SetPath(prFileDialogInternal, std::string(puInputPathBuffer));
-					puInputPathActivated = false;
-				}
-				if (ImGui::IsKeyReleased(gio.KeyMap[ImGuiKey_Escape]))
-				{
-					puInputPathActivated = false;
-				}
-			}
 #ifdef USE_EXPLORATION_BY_KEYS
-			else
+			if (!fdi.puInputPathActivated)
 			{
-				prLocateByInputKey();
-				prExploreWithkeys();
+				prLocateByInputKey(prFileDialogInternal);
+				prExploreWithkeys(prFileDialogInternal, listViewID);
 			}
 #endif // USE_EXPLORATION_BY_KEYS
+
+			ImGuiContext& g = *GImGui;
+			if (g.LastActiveId - 1 == listViewID || g.LastActiveId == listViewID)
+			{
+				prFileDialogInternal.puFileListViewIsActive = true;
+			}
+
 			ImGui::EndTable();
 		}
-		// changement de repertoire
-		if (puPathClicked)
-		{
-			prFileDialogInternal.puFileManager.SetPath(prFileDialogInternal, prFileDialogInternal.puFileManager.GetCurrentPath());
-		}
 
-		if (puDrivesClicked)
-		{
-			if (GetDrives())
-			{
-				ApplyFilteringOnFileList();
-			}
-		}
+		ImGui::PopID();
+	}
 
+	void IGFD::FileDialog::prDrawThumbnailsGridView(ImVec2 vSize)
+	{
+		if (ImGui::BeginChild("##thumbnailsGridsFiles", vSize))
+		{
+		}
 		ImGui::EndChild();
 	}
 
-	void IGFD::FileDialog::prDrawSmallThumbnailsView(ImVec2 vSize)
-	{
-
-	}
-
-	void IGFD::FileDialog::prDrawBigThumbnailsView(ImVec2 vSize)
-	{
-
-	}
-#endif // USE_THUMBNAILS
+#endif
 
 	void IGFD::FileDialog::prDrawSidePane(float vHeight)
 	{
@@ -3670,19 +3810,6 @@ namespace IGFD
 		prFileDialogInternal.puFilterManager.ClearExtentionInfos();
 	}
 
-#ifdef USE_THUMBNAILS
-	void IGFD::FileDialog::SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun)
-	{
-		prCreateTextureFun = vCreateTextureFun;
-	}
-
-	void IGFD::FileDialog::SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun)
-	{
-		prDestroyTextureFun = vCreateTextureFun;
-	}
-
-#endif // USE_THUMBNAILS
-
 	//////////////////////////////////////////////////////////////////////////////
 	//// OVERWRITE DIALOG ////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////
@@ -3695,12 +3822,14 @@ namespace IGFD
 		// if IsOk == false => return false for quit the dialog
 		if (!prFileDialogInternal.puIsOk && vLastAction)
 		{
+			QuitFrame();
 			return true;
 		}
 
 		// if IsOk == true && no check of overwrite => return true for confirm the dialog
 		if (prFileDialogInternal.puIsOk && vLastAction && !(prFileDialogInternal.puDLGflags & ImGuiFileDialogFlags_ConfirmOverwrite))
 		{
+			QuitFrame();
 			return true;
 		}
 
@@ -3712,6 +3841,7 @@ namespace IGFD
 			{
 				if (!prFileDialogInternal.puFileManager.IsFileExist(GetFilePathName())) // not existing => quit dialog
 				{
+					QuitFrame();
 					return true;
 				}
 				else // existing => confirm dialog to open
@@ -3755,6 +3885,10 @@ namespace IGFD
 				ImGui::EndPopup();
 			}
 
+			if (res)
+			{
+				QuitFrame();
+			}
 			return res;
 		}
 

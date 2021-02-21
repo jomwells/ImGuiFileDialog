@@ -12,6 +12,7 @@
 //#define DONT_DEFINE_AGAIN__STB_IMAGE_IMPLEMENTATION
 //#define DONT_DEFINE_AGAIN__STB_IMAGE_RESIZE_IMPLEMENTATION
 //#define IMGUI_RADIO_BUTTON RadioButton
+//#define DisplayMode_ThumbailsList_ImageHeight 32.0f
 //#define DisplayMode_FilesList_ButtonString "FL"
 //#define DisplayMode_FilesList_ButtonHelp "File List"
 //#define DisplayMode_ThumbailsList_ButtonString "TL"

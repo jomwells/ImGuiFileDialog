@@ -490,13 +490,14 @@ enum ImGuiFileDialogFlags_
 #ifdef USE_THUMBNAILS
 struct IGFD_Thumbnail_Info
 {
-	bool isReadyToDisplay = false;	// ready to be rendered, so texture created
-	bool isReadyToUpload = false;	// ready to upload to gpu
-	uint32_t textureID = 0;			// 2d texture id (GL, DX, VK, Etc..)
-	uint8_t* textureDatas = NULL;	// file texture datas, will be rested to null after gpu upload
-	int textureWidth = 0;			// width of the texture to upload
-	int textureHeight = 0;			// height of the texture to upload
-	int textureChannels = 0;		// count channels of the texture to upload
+	bool isReadyToDisplay = false;		// ready to be rendered, so texture created
+	bool isReadyToUpload = false;		// ready to upload to gpu
+	bool isLoadingOrLoaded = false;		// was sent to laoding or loaded
+	void* textureID = nullptr;			// 2d texture id (void* is like ImtextureID type) (GL, DX, VK, Etc..)
+ 	uint8_t* textureFileDatas = NULL;	// file texture datas, will be rested to null after gpu upload
+	int textureWidth = 0;				// width of the texture to upload
+	int textureHeight = 0;				// height of the texture to upload
+	int textureChannels = 0;			// count channels of the texture to upload
 };
 #endif // USE_THUMBNAILS
 
@@ -645,53 +646,52 @@ namespace IGFD
 	class FileManager
 	{
 	public: // types
-		enum class SortingFieldEnum				// sorting for filetering of the file lsit
+		enum class SortingFieldEnum		// sorting for filetering of the file lsit
 		{
-			FIELD_NONE = 0,						// no sorting preference, result indetermined haha..
-			FIELD_FILENAME,						// sorted by filename
-			FIELD_TYPE,							// sorted by filetype
-			FIELD_SIZE,							// sorted by filesize (formated file size)
-			FIELD_DATE							// sorted by filedate
+			FIELD_NONE = 0,				// no sorting preference, result indetermined haha..
+			FIELD_FILENAME,				// sorted by filename
+			FIELD_TYPE,					// sorted by filetype
+			FIELD_SIZE,					// sorted by filesize (formated file size)
+			FIELD_DATE					// sorted by filedate
 		};
 
 	private:
-		std::string prCurrentPath;
-		std::vector<std::string> prCurrentPathDecomposition;
-		std::vector<std::shared_ptr<FileInfos>> prFileList;						// base container
-		std::vector<std::shared_ptr<FileInfos>> prFilteredFileList;				// filtered container (search, sorting, etc..)
-		std::string prLastSelectedFileName; // for shift multi selection
-		std::set<std::string> prSelectedFileNames;
-		bool prCreateDirectoryMode = false;					// for create directory mode
+		std::string prCurrentPath;											// current path (to be decomposed in prCurrentPathDecomposition
+		std::vector<std::string> prCurrentPathDecomposition;				// part words
+		std::vector<std::shared_ptr<FileInfos>> prFileList;					// base container
+		std::vector<std::shared_ptr<FileInfos>> prFilteredFileList;			// filtered container (search, sorting, etc..)
+		std::string prLastSelectedFileName;									// for shift multi selection
+		std::set<std::string> prSelectedFileNames;							// the user selection of FilePathNames
+		bool prCreateDirectoryMode = false;									// for create directory widget
 
 	public:
-		char puVariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";	 // called by prSelectableItem
-		bool puInputPathActivated = false; // show input for path edition
-		bool puDrivesClicked = false; // events
-		bool puPathClicked = false;// events
-		char puInputPathBuffer[MAX_PATH_BUFFER_SIZE] = "";
-		char puFileNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-		char puDirectoryNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";
-		std::string puHeaderFileName;						// detail view column file
-		std::string puHeaderFileType;						// detail view column type
-		std::string puHeaderFileSize;						// detail view column size
-		std::string puHeaderFileDate;						// detail view column date + time
-		bool puSortingDirection[4] = { true, true, true, true };	// detail view // true => Descending, false => Ascending
-		SortingFieldEnum puSortingField = SortingFieldEnum::FIELD_FILENAME;  // detail view sorting column
-		bool puShowDrives = false;
+		char puVariadicBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";			// called by prSelectableItem
+		bool puInputPathActivated = false;									// show input for path edition
+		bool puDrivesClicked = false;										// event when a drive button is clicked
+		bool puPathClicked = false;											// event when a path button was clicked
+		char puInputPathBuffer[MAX_PATH_BUFFER_SIZE] = "";					// input path buffer for imgui widget input text (displayed in palce of composer)
+		char puFileNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";			// file name buffer in footer for imgui widget input text
+		char puDirectoryNameBuffer[MAX_FILE_DIALOG_NAME_BUFFER] = "";		// directory name buffer in footer for imgui widget input text (when is directory mode)
+		std::string puHeaderFileName;										// detail view name of column file
+		std::string puHeaderFileType;										// detail view name of column type
+		std::string puHeaderFileSize;										// detail view name of column size
+		std::string puHeaderFileDate;										// detail view name of column date + time
+		bool puSortingDirection[4] = { true, true, true, true };			// detail view // true => Descending, false => Ascending
+		SortingFieldEnum puSortingField = SortingFieldEnum::FIELD_FILENAME;	// detail view sorting column
+		bool puShowDrives = false;											// drives are shown (only on os windows)
 
-		// defined with openDialog/OpenModal calls
-		std::string puDLGpath;
-		std::string puDLGDefaultFileName;
-		size_t puDLGcountSelectionMax = 1U; // 0 for infinite
-		bool puDLGDirectoryMode = false;
+		std::string puDLGpath;												// base path set by user when OpenDialog/OpenModal was called
+		std::string puDLGDefaultFileName;									// base default file path name set by user when OpenDialog/OpenModal was called
+		size_t puDLGcountSelectionMax = 1U; // 0 for infinite				// base max selection count set by user when OpenDialog/OpenModal was called
+		bool puDLGDirectoryMode = false;									// is directory mode (defiend like : puDLGDirectoryMode = (filters.empty()))
 
 	private:
-		std::string prRoundNumber(double vvalue, int n);
-		std::string prFormatFileSize(size_t vByteSize);
-		void prOptimizeFilenameForSearchOperations(std::string& vFileName);
-		void prCompleteFileInfos(std::shared_ptr<FileInfos> FileInfos);			// set time and date infos of a file (detail view mode)
-		void prRemoveFileNameInSelection(const std::string& vFileName);														// selection : remove a file name
-		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);						// selection : add a file name
+		std::string prRoundNumber(double vvalue, int n);												// custom rounding number
+		std::string prFormatFileSize(size_t vByteSize);													// format file size field
+		void prOptimizeFilenameForSearchOperations(std::string& vFileName);								// turn all text in lower case for search facilitie
+		void prCompleteFileInfos(std::shared_ptr<FileInfos> FileInfos);									// set time and date infos of a file (detail view mode)
+		void prRemoveFileNameInSelection(const std::string& vFileName);									// selection : remove a file name
+		void prAddFileNameInSelection(const std::string& vFileName, bool vSetLastSelectionFileName);	// selection : add a file name
 		
 	public:
 		bool IsComposerEmpty();
@@ -737,74 +737,72 @@ namespace IGFD
 
 #ifdef USE_THUMBNAILS
 	typedef std::function<void(IGFD_Thumbnail_Info*)> CreateTextureFun;	// texture 2d creation function binding
-	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyTextureFun;			// texture 2d destroy function binding
-	class FileDialogThumbnail
+	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyTextureFun;// texture 2d destroy function binding
+#endif
+	class ThumbnailFeature
 	{
+	protected:
+		ThumbnailFeature();
+		~ThumbnailFeature();
+
+		void NewThumbnailFrame();
+		void EndThumbnailFrame();
+		void QuitThumbnailFrame();
+
+#ifdef USE_THUMBNAILS
 	protected:
 		enum class DisplayModeEnum
 		{
 			FILE_LIST = 0,
-			THUMBAILS_LIST,
-			SMALL_THUMBAILS,
-			BIG_THUMBAILS
+			THUMBNAILS_LIST,
+			THUMBNAILS_GRID
 		};
 
 	private:
 		uint32_t prCountFiles = 0U;
 		bool prIsWorking = false;
 		std::shared_ptr<std::thread> prThumbnailGenerationThread = nullptr;
+		
+		std::list<std::shared_ptr<FileInfos>> prTextureFileDatasToGet; // base container
+		std::mutex prTextureFileDatasToGetMutex;
+		
+		std::list<std::shared_ptr<FileInfos>> prTextureToCreate; // base container
+		std::mutex prTextureToCreateMutex;
+
+		std::list<std::shared_ptr<FileInfos>> prTextureToDestroy; // base container
+		std::mutex prTextureToDestroyMutex;
+
 		CreateTextureFun prCreateTextureFun = nullptr;
 		DestroyTextureFun prDestroyTextureFun = nullptr;
-		std::vector<std::shared_ptr<FileInfos>> prFilesTextureToLoad; // base container
-		std::mutex texturesToLoad_mutex;
 
 	protected:
 		DisplayModeEnum prDisplayMode = DisplayModeEnum::FILE_LIST;
 
 	protected:
-		FileDialogThumbnail();
-		~FileDialogThumbnail();
-		void prStartThumbnailGeneration();
-		bool prStopThumbnailGeneration();
-		void prThumbnailGenerationThreadFunc();
-		void prDrawThumbnailGenerationProgress();
-		void prFinalizeThumbnailGeneration();
-		void prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos);
-		virtual void prDrawDisplayModeToolBar();					// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
-		virtual void prDrawDisplayModeView(ImVec2 vSize)
-		{
-			switch (prDisplayMode)
-			{
-			case DisplayModeEnum::THUMBAILS_LIST:
-				prDrawThumbnailsListView(vSize);
-				break;
-			case DisplayModeEnum::SMALL_THUMBAILS:
-				prDrawSmallThumbnailsView(vSize);
-				break;
-			case DisplayModeEnum::BIG_THUMBAILS:
-				prDrawBigThumbnailsView(vSize);
-				break;
-			}
-		}
-		virtual void prDrawThumbnailsListView(ImVec2 vSize);		// draw file list view with small thumbnails on the same line
-		virtual void prDrawSmallThumbnailsView(ImVec2 vSize);		// draw a grid of small thumbnails
-		virtual void prDrawBigThumbnailsView(ImVec2 vSize);			// draw a grid of bigs thumbnails
-		void ClearThumbnail(IGFD_Thumbnail_Info& vThumbnailInfo)
-		{
-			if (prDestroyTextureFun)
-			{
-				if (vThumbnailInfo.isReadyToDisplay)
-				{
-					prDestroyTextureFun(&vThumbnailInfo);
-				}
-			}
-		}
+		// will be call in cpu zone (imgui computations, will call a texture file retrieval thread)
+		void prStartTextureFileDatasExtraction();				// start the thread who will get byte buffer from image files
+		bool prStopTextureFileDatasExtraction();				// stop the thread who will get byte buffer from image files
+		void prThreadTextureFileDatasExtractionFunc();			// the thread who will get byte buffer from image files
+		
+		void prDrawThumbnailGenerationProgress();				// a little progressbar who will display the texture gen status
+		void prClearThumbnails();								// after tht end of the thread
+
+		void prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos);		// add texture to load in the thread
+		void prAddTextureToCreate(std::shared_ptr<FileInfos> vFileInfos);
+		void prAddTextureToDestroy(std::shared_ptr<FileInfos> vFileInfos);
+
+		void prDrawDisplayModeToolBar();						// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
+		void prClearThumbnail(IGFD_Thumbnail_Info& vThumbnailInfo);
 
 	public:
 		void SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun);
 		void SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun);
-	};
+		
+		// must be call in gpu zone (rendering, possibly one rendering thread)
+		void ManageGPUTextures();	// in gpu rendering zone, whill create or destroy texture
+
 #endif
+	};
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -812,7 +810,7 @@ namespace IGFD
 
 	class BookMarkFeature
 	{
-	public:
+	protected:
 		BookMarkFeature();
 
 #ifdef USE_BOOKMARK
@@ -851,7 +849,7 @@ namespace IGFD
 	// file localization by input chat // widget flashing
 	class KeyExplorerFeature
 	{
-	public:
+	protected:
 		KeyExplorerFeature();
 
 #ifdef USE_EXPLORATION_BY_KEYS
@@ -924,10 +922,10 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	class FileDialog : public BookMarkFeature, public KeyExplorerFeature
-#ifdef USE_THUMBNAILS
-		, virtual public FileDialogThumbnail
-#endif
+	class FileDialog : 
+		public BookMarkFeature, 
+		public KeyExplorerFeature, 
+		public ThumbnailFeature
 	{
 	private:
 		FileDialogInternal prFileDialogInternal;
@@ -1074,6 +1072,10 @@ namespace IGFD
 		void ClearExtentionInfos();									// clear extentions setttings
 
 	protected:
+		void NewFrame();											// new frame just at begining of display
+		void EndFrame();											// end frame just at end of display
+		void QuitFrame();											// quit frame when qui quit the dialog
+
 		// dialog parts
 		virtual void prDrawHeader();								// draw header part of the dialog (bookmark btn, dir creation, path composer, search bar)
 		virtual void prDrawContent();								// draw content part of the dialog (bookmark pane, file list, side pane)
@@ -1083,6 +1085,11 @@ namespace IGFD
 		virtual void prDrawSidePane(float vHeight);					// draw side pane
 		virtual bool prSelectableItem(int vidx, std::shared_ptr<FileInfos> vInfos, bool vSelected, const char* vFmt, ...);
 		virtual void prDrawFileListView(ImVec2 vSize); // draw file list view (default mode)
+
+#ifdef USE_THUMBNAILS
+		virtual void prDrawThumbnailsListView(ImVec2 vSize);		// draw file list view with small thumbnails on the same line
+		virtual void prDrawThumbnailsGridView(ImVec2 vSize);		// draw a grid of small thumbnails
+#endif
 
 		// others
 		bool prConfirm_Or_OpenOverWriteFileDialog_IfNeeded(bool vLastAction, ImGuiWindowFlags vFlags);						// treatment of the result, start the confirm to overwrite dialog if needed (if defined with flag)
