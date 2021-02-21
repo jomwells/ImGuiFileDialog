@@ -3644,7 +3644,7 @@ namespace IGFD
 						{
 							ImGui::Text("%s", infos->fileModifDate.c_str());
 						}
-						if (ImGui::TableNextColumn()) // file date + time
+						if (ImGui::TableNextColumn()) // file thumbnails
 						{
 							if (!infos->thumbnailInfo.isLoadingOrLoaded)
 							{
