@@ -213,18 +213,12 @@ namespace IGFD
 #ifndef DisplayMode_ThumbailsList_ButtonHelp
 #define DisplayMode_ThumbailsList_ButtonHelp "Thumbnails List"
 #endif // DisplayMode_ThumbailsList_ButtonHelp
-#ifndef DisplayMode_ThumbailsSmall_ButtonString
-#define DisplayMode_ThumbailsSmall_ButtonString "ST"
-#endif // DisplayMode_ThumbailsSmall_ButtonString
-#ifndef DisplayMode_ThumbailsSmall_ButtonHelp
-#define DisplayMode_ThumbailsSmall_ButtonHelp "Small Thumbnails"
-#endif // DisplayMode_ThumbailsSmall_ButtonHelp
-#ifndef DisplayMode_ThumbailsBig_ButtonString
-#define DisplayMode_ThumbailsBig_ButtonString "BT"
-#endif // DisplayMode_ThumbailsBig_ButtonString
-#ifndef DisplayMode_ThumbailsBig_ButtonHelp
-#define DisplayMode_ThumbailsBig_ButtonHelp "Big Thumbnails"
-#endif // DisplayMode_ThumbailsBig_ButtonHelp
+#ifndef DisplayMode_ThumbailsGrid_ButtonString
+#define DisplayMode_ThumbailsGrid_ButtonString "TG"
+#endif // DisplayMode_ThumbailsGrid_ButtonString
+#ifndef DisplayMode_ThumbailsGrid_ButtonHelp
+#define DisplayMode_ThumbailsGrid_ButtonHelp "Thumbnails Grid"
+#endif // DisplayMode_ThumbailsGrid_ButtonHelp
 #ifndef IMGUI_RADIO_BUTTON
 	inline bool inRadioButton(const char* vLabel, bool vToggled)
 	{
@@ -2135,10 +2129,10 @@ namespace IGFD
 			prDisplayMode = DisplayModeEnum::THUMBNAILS_LIST;
 		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsList_ButtonHelp);
 		ImGui::SameLine();
-		if (IMGUI_RADIO_BUTTON(DisplayMode_ThumbailsSmall_ButtonString,
+		if (IMGUI_RADIO_BUTTON(DisplayMode_ThumbailsGrid_ButtonString,
 			prDisplayMode == DisplayModeEnum::THUMBNAILS_GRID))
 			prDisplayMode = DisplayModeEnum::THUMBNAILS_GRID;
-		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsSmall_ButtonHelp);
+		if (ImGui::IsItemHovered())	ImGui::SetTooltip(DisplayMode_ThumbailsGrid_ButtonHelp);
 		ImGui::SameLine();
 		prDrawThumbnailGenerationProgress();
 	}
@@ -3658,7 +3652,8 @@ namespace IGFD
 							{
 								prAddTextureToLoad(infos);
 							}
-							if (infos->thumbnailInfo.isReadyToDisplay)
+							if (infos->thumbnailInfo.isReadyToDisplay && 
+								infos->thumbnailInfo.textureID)
 							{
 								ImGui::Image((ImTextureID)infos->thumbnailInfo.textureID, 
 									ImVec2(infos->thumbnailInfo.textureWidth, infos->thumbnailInfo.textureHeight));
