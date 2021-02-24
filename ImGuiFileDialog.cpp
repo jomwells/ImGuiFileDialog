@@ -1886,6 +1886,8 @@ namespace IGFD
 
 	void IGFD::ThumbnailFeature::NewThumbnailFrame(FileDialogInternal& vFileDialogInternal)
 	{
+		(void)vFileDialogInternal;
+
 #ifdef USE_THUMBNAILS
 		prStartThumbnailFileDatasExtraction();
 #endif
@@ -1941,8 +1943,6 @@ namespace IGFD
 		prCountFiles = 0U;
 		prIsWorking = true;
 
-		int max_conurent_thread = 2;
-
 		// infinite loop while is thread working
 		while(prIsWorking)
 		{
@@ -1988,9 +1988,9 @@ namespace IGFD
 									if (newX < w) 
 										newY = DisplayMode_ThumbailsList_ImageHeight;
 
-									const int newWidth = newX;
-									const int newHeight = newY;
-									const size_t newBufSize = newWidth * newHeight * 4;
+									const int newWidth = (int)newX;
+									const int newHeight = (int)newY;
+									const size_t newBufSize = (size_t)(newWidth * newHeight * 4);
 									auto resizedData = new uint8_t[newBufSize];
 									
 									const int resizeSucceeded = stbir_resize_uint8(
@@ -2018,7 +2018,7 @@ namespace IGFD
 #ifdef _MSC_VER
 									if (IsDebuggerPresent())
 									{
-										__debugbreak;
+										__debugbreak();
 									}
 #endif
 								}
@@ -3665,7 +3665,8 @@ namespace IGFD
 								infos->thumbnailInfo.textureID)
 							{
 								ImGui::Image((ImTextureID)infos->thumbnailInfo.textureID, 
-									ImVec2(infos->thumbnailInfo.textureWidth, infos->thumbnailInfo.textureHeight));
+									ImVec2((float)infos->thumbnailInfo.textureWidth, 
+										(float)infos->thumbnailInfo.textureHeight));
 							}
 						}
 

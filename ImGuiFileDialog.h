@@ -490,15 +490,15 @@ enum ImGuiFileDialogFlags_
 #ifdef USE_THUMBNAILS
 struct IGFD_Thumbnail_Info
 {
-	bool isReadyToDisplay = false;		// ready to be rendered, so texture created
-	bool isReadyToUpload = false;		// ready to upload to gpu
-	bool isLoadingOrLoaded = false;		// was sent to laoding or loaded
-	void* textureID = nullptr;			// 2d texture id (void* is like ImtextureID type) (GL, DX, VK, Etc..)
- 	uint8_t* textureFileDatas = NULL;	// file texture datas, will be rested to null after gpu upload
-	int textureWidth = 0;				// width of the texture to upload
-	int textureHeight = 0;				// height of the texture to upload
-	int textureChannels = 0;			// count channels of the texture to upload
-	void* userDatas = 0;				// user datas
+	bool isReadyToDisplay = false;			// ready to be rendered, so texture created
+	bool isReadyToUpload = false;			// ready to upload to gpu
+	bool isLoadingOrLoaded = false;			// was sent to laoding or loaded
+	void* textureID = 0;					// 2d texture id (void* is like ImtextureID type) (GL, DX, VK, Etc..)
+ 	unsigned char* textureFileDatas = 0;	// file texture datas, will be rested to null after gpu upload
+	int textureWidth = 0;					// width of the texture to upload
+	int textureHeight = 0;					// height of the texture to upload
+	int textureChannels = 0;				// count channels of the texture to upload
+	void* userDatas = 0;					// user datas
 };
 #endif // USE_THUMBNAILS
 
