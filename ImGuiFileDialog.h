@@ -498,6 +498,7 @@ struct IGFD_Thumbnail_Info
 	int textureWidth = 0;				// width of the texture to upload
 	int textureHeight = 0;				// height of the texture to upload
 	int textureChannels = 0;			// count channels of the texture to upload
+	void* userDatas = 0;				// user datas
 };
 #endif // USE_THUMBNAILS
 
@@ -698,6 +699,8 @@ namespace IGFD
 		size_t GetComposerSize();
 		bool IsFileListEmpty();
 		bool IsFilteredListEmpty();
+		size_t GetFullFileListSize();
+		std::shared_ptr<FileInfos> GetFullFileAt(size_t vIdx);
 		size_t GetFilteredListSize();
 		std::shared_ptr<FileInfos> GetFilteredFileAt(size_t vIdx);
 		bool IsFileNameSelected(const std::string vFileName);
@@ -736,8 +739,8 @@ namespace IGFD
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef USE_THUMBNAILS
-	typedef std::function<void(IGFD_Thumbnail_Info*)> CreateTextureFun;	// texture 2d creation function binding
-	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyTextureFun;// texture 2d destroy function binding
+	typedef std::function<void(IGFD_Thumbnail_Info*)> CreateThumbnailFun;	// texture 2d creation function binding
+	typedef std::function<void(IGFD_Thumbnail_Info*)> DestroyThumbnailFun;// texture 2d destroy function binding
 #endif
 	class ThumbnailFeature
 	{
@@ -745,9 +748,9 @@ namespace IGFD
 		ThumbnailFeature();
 		~ThumbnailFeature();
 
-		void NewThumbnailFrame();
-		void EndThumbnailFrame();
-		void QuitThumbnailFrame();
+		void NewThumbnailFrame(FileDialogInternal& vFileDialogInternal);
+		void EndThumbnailFrame(FileDialogInternal& vFileDialogInternal);
+		void QuitThumbnailFrame(FileDialogInternal& vFileDialogInternal);
 
 #ifdef USE_THUMBNAILS
 	protected:
@@ -763,43 +766,42 @@ namespace IGFD
 		bool prIsWorking = false;
 		std::shared_ptr<std::thread> prThumbnailGenerationThread = nullptr;
 		
-		std::list<std::shared_ptr<FileInfos>> prTextureFileDatasToGet; // base container
-		std::mutex prTextureFileDatasToGetMutex;
+		std::list<std::shared_ptr<FileInfos>> prThumbnailFileDatasToGet; // base container
+		std::mutex prThumbnailFileDatasToGetMutex;
 		
-		std::list<std::shared_ptr<FileInfos>> prTextureToCreate; // base container
-		std::mutex prTextureToCreateMutex;
+		std::list<std::shared_ptr<FileInfos>> prThumbnailToCreate; // base container
+		std::mutex prThumbnailToCreateMutex;
 
-		std::list<std::shared_ptr<FileInfos>> prTextureToDestroy; // base container
-		std::mutex prTextureToDestroyMutex;
+		std::list<IGFD_Thumbnail_Info> prThumbnailToDestroy; // base container
+		std::mutex prThumbnailToDestroyMutex;
 
-		CreateTextureFun prCreateTextureFun = nullptr;
-		DestroyTextureFun prDestroyTextureFun = nullptr;
+		CreateThumbnailFun prCreateThumbnailFun = nullptr;
+		DestroyThumbnailFun prDestroyThumbnailFun = nullptr;
 
 	protected:
 		DisplayModeEnum prDisplayMode = DisplayModeEnum::FILE_LIST;
 
 	protected:
 		// will be call in cpu zone (imgui computations, will call a texture file retrieval thread)
-		void prStartTextureFileDatasExtraction();				// start the thread who will get byte buffer from image files
-		bool prStopTextureFileDatasExtraction();				// stop the thread who will get byte buffer from image files
-		void prThreadTextureFileDatasExtractionFunc();			// the thread who will get byte buffer from image files
+		void prStartThumbnailFileDatasExtraction();				// start the thread who will get byte buffer from image files
+		bool prStopThumbnailFileDatasExtraction();				// stop the thread who will get byte buffer from image files
+		void prThreadThumbnailFileDatasExtractionFunc();			// the thread who will get byte buffer from image files
 		
 		void prDrawThumbnailGenerationProgress();				// a little progressbar who will display the texture gen status
-		void prClearThumbnails();								// after tht end of the thread
-
-		void prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos);		// add texture to load in the thread
-		void prAddTextureToCreate(std::shared_ptr<FileInfos> vFileInfos);
-		void prAddTextureToDestroy(std::shared_ptr<FileInfos> vFileInfos);
+		
+		void prAddThumbnailToLoad(std::shared_ptr<FileInfos> vFileInfos);		// add texture to load in the thread
+		void prAddThumbnailToCreate(std::shared_ptr<FileInfos> vFileInfos);
+		void prAddThumbnailToDestroy(IGFD_Thumbnail_Info vIGFD_Thumbnail_Info);
 
 		void prDrawDisplayModeToolBar();						// draw displya mode toolbar (file list, thumbnails list, small thumbnails grid, big thumbnails grid)
-		void prClearThumbnail(IGFD_Thumbnail_Info& vThumbnailInfo);
+		void prClearThumbnails(FileDialogInternal& vFileDialogInternal);
 
 	public:
-		void SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun);
-		void SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun);
+		void SetCreateThumbnailCallback(const CreateThumbnailFun vCreateThumbnailFun);
+		void SetDestroyThumbnailCallback(const DestroyThumbnailFun vCreateThumbnailFun);
 		
 		// must be call in gpu zone (rendering, possibly one rendering thread)
-		void ManageGPUTextures();	// in gpu rendering zone, whill create or destroy texture
+		void ManageGPUThumbnails();	// in gpu rendering zone, whill create or destroy texture
 
 #endif
 	};

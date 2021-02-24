@@ -248,8 +248,8 @@ namespace IGFD
 #ifndef DisplayMode_ThumbailsList_ImageHeight 
 #define DisplayMode_ThumbailsList_ImageHeight 32.0f
 #endif // DisplayMode_ThumbailsList_ImageHeight
-	static IGFD::CreateTextureFun sCreateTextureFun = nullptr;
-	static IGFD::DestroyTextureFun sDestroyTextureFun = nullptr;
+	static IGFD::CreateThumbnailFun sCreateThumbnailFun = nullptr;
+	static IGFD::DestroyThumbnailFun sDestroyThumbnailFun = nullptr;
 #endif  // USE_THUMBNAILS
 
 #ifdef USE_BOOKMARK
@@ -996,21 +996,6 @@ namespace IGFD
 	void IGFD::FileManager::ClearFileLists()
 	{
 		prFilteredFileList.clear();
-/*#ifdef USE_THUMBNAILS
-		for (auto file : prFileList)
-		{
-			if (file.use_count())
-			{
-				if (file->thumbnailInfo.isReadyToDisplay)
-				{
-					if (prDestroyTextureFun)
-					{
-						prDestroyTextureFun(&file->thumbnailInfo);
-					}
-				}
-			}
-		}
-#endif*/
 		prFileList.clear();
 	}
 
@@ -1139,6 +1124,18 @@ namespace IGFD
 	bool IGFD::FileManager::IsFileListEmpty()
 	{
 		return prFileList.empty();
+	}
+
+	size_t IGFD::FileManager::GetFullFileListSize()
+	{
+		return prFileList.size();
+	}
+
+	std::shared_ptr<FileInfos> IGFD::FileManager::GetFullFileAt(size_t vIdx)
+	{
+		if (vIdx < prFileList.size())
+			return prFileList[vIdx];
+		return nullptr;
 	}
 
 	bool IGFD::FileManager::IsFilteredListEmpty()
@@ -1887,28 +1884,30 @@ namespace IGFD
 
 	}
 
-	void IGFD::ThumbnailFeature::NewThumbnailFrame()
+	void IGFD::ThumbnailFeature::NewThumbnailFrame(FileDialogInternal& vFileDialogInternal)
 	{
 #ifdef USE_THUMBNAILS
-		prStartTextureFileDatasExtraction();
+		prStartThumbnailFileDatasExtraction();
 #endif
 	}
 
-	void IGFD::ThumbnailFeature::EndThumbnailFrame()
-	{
-
-	}
-
-	void IGFD::ThumbnailFeature::QuitThumbnailFrame()
+	void IGFD::ThumbnailFeature::EndThumbnailFrame(FileDialogInternal& vFileDialogInternal)
 	{
 #ifdef USE_THUMBNAILS
-		prStopTextureFileDatasExtraction();
-		prClearThumbnails();
+		prClearThumbnails(vFileDialogInternal);
+#endif
+	}
+
+	void IGFD::ThumbnailFeature::QuitThumbnailFrame(FileDialogInternal& vFileDialogInternal)
+	{
+#ifdef USE_THUMBNAILS
+		prStopThumbnailFileDatasExtraction();
+		prClearThumbnails(vFileDialogInternal);
 #endif
 	}
 
 #ifdef USE_THUMBNAILS
-	void IGFD::ThumbnailFeature::prStartTextureFileDatasExtraction()
+	void IGFD::ThumbnailFeature::prStartThumbnailFileDatasExtraction()
 	{
 		const bool res = prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable();
 		if (!res)
@@ -1916,7 +1915,7 @@ namespace IGFD
 			prIsWorking = true;
 			prCountFiles = 0U;
 			prThumbnailGenerationThread = std::shared_ptr<std::thread>(
-				new std::thread(&IGFD::ThumbnailFeature::prThreadTextureFileDatasExtractionFunc, this), 
+				new std::thread(&IGFD::ThumbnailFeature::prThreadThumbnailFileDatasExtractionFunc, this),
 				[this](std::thread* obj)
 				{
 					prIsWorking = false;
@@ -1926,7 +1925,7 @@ namespace IGFD
 		}
 	}
 
-	bool IGFD::ThumbnailFeature::prStopTextureFileDatasExtraction()
+	bool IGFD::ThumbnailFeature::prStopThumbnailFileDatasExtraction()
 	{
 		const bool res = prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable();
 		if (res)
@@ -1937,7 +1936,7 @@ namespace IGFD
 		return res;
 	}
 	
-	void IGFD::ThumbnailFeature::prThreadTextureFileDatasExtractionFunc()
+	void IGFD::ThumbnailFeature::prThreadThumbnailFileDatasExtractionFunc()
 	{
 		prCountFiles = 0U;
 		prIsWorking = true;
@@ -1947,14 +1946,14 @@ namespace IGFD
 		// infinite loop while is thread working
 		while(prIsWorking)
 		{
-			if (!prTextureFileDatasToGet.empty())
+			if (!prThumbnailFileDatasToGet.empty())
 			{
 				std::shared_ptr<FileInfos> file = nullptr;
-				prTextureFileDatasToGetMutex.lock();
+				prThumbnailFileDatasToGetMutex.lock();
 				//get the first file in the list
-				if (!prTextureFileDatasToGet.empty())
-					file = (*prTextureFileDatasToGet.begin());
-				prTextureFileDatasToGetMutex.unlock();
+				if (!prThumbnailFileDatasToGet.empty())
+					file = (*prThumbnailFileDatasToGet.begin());
+				prThumbnailFileDatasToGetMutex.unlock();
 
 				// retrieve datas of the texture file if its an image file
 				if (file.use_count())
@@ -2010,7 +2009,7 @@ namespace IGFD
 										file->thumbnailInfo.isReadyToUpload = true;
 
 										// need gpu loading
-										prAddTextureToCreate(file);
+										prAddThumbnailToCreate(file);
 									}
 								}
 								else
@@ -2032,9 +2031,9 @@ namespace IGFD
 					// peu importe le resultat on vire le fichicer
 					// remove form this list
 					// write => thread concurency issues
-					prTextureFileDatasToGetMutex.lock();
-					prTextureFileDatasToGet.pop_front();
-					prTextureFileDatasToGetMutex.unlock();
+					prThumbnailFileDatasToGetMutex.lock();
+					prThumbnailFileDatasToGet.pop_front();
+					prThumbnailFileDatasToGetMutex.unlock();
 				}
 			}
 		}
@@ -2059,16 +2058,16 @@ namespace IGFD
 	{
 		if (prThumbnailGenerationThread.use_count() && prThumbnailGenerationThread->joinable())
 		{
-			if (!prTextureFileDatasToGet.empty())
+			if (!prThumbnailFileDatasToGet.empty())
 			{
-				const float p = (float)((double)prCountFiles / (double)prTextureFileDatasToGet.size()); // read => no thread concurency issues
-				inVariadicProgressBar(p, ImVec2(50, 0), "%u/%u", prCountFiles, (uint32_t)prTextureFileDatasToGet.size()); // read => no thread concurency issues
+				const float p = (float)((double)prCountFiles / (double)prThumbnailFileDatasToGet.size()); // read => no thread concurency issues
+				inVariadicProgressBar(p, ImVec2(50, 0), "%u/%u", prCountFiles, (uint32_t)prThumbnailFileDatasToGet.size()); // read => no thread concurency issues
 				ImGui::SameLine();
 			}
 		}
 	}
 
-	void IGFD::ThumbnailFeature::prAddTextureToLoad(std::shared_ptr<FileInfos> vFileInfos)
+	void IGFD::ThumbnailFeature::prAddThumbnailToLoad(std::shared_ptr<FileInfos> vFileInfos)
 	{
 		if (vFileInfos.use_count())
 		{
@@ -2086,35 +2085,32 @@ namespace IGFD
 					)
 				{
 					// write => thread concurency issues
-					prTextureFileDatasToGetMutex.lock();
-					prTextureFileDatasToGet.push_back(vFileInfos);
+					prThumbnailFileDatasToGetMutex.lock();
+					prThumbnailFileDatasToGet.push_back(vFileInfos);
 					vFileInfos->thumbnailInfo.isLoadingOrLoaded = true;
-					prTextureFileDatasToGetMutex.unlock();
+					prThumbnailFileDatasToGetMutex.unlock();
 				}
 			}
 		}
 	}
 	
-	void IGFD::ThumbnailFeature::prAddTextureToCreate(std::shared_ptr<FileInfos> vFileInfos)
+	void IGFD::ThumbnailFeature::prAddThumbnailToCreate(std::shared_ptr<FileInfos> vFileInfos)
 	{
 		if (vFileInfos.use_count())
 		{
 			// write => thread concurency issues
-			prTextureToCreateMutex.lock();
-			prTextureToCreate.push_back(vFileInfos);
-			prTextureToCreateMutex.unlock();
+			prThumbnailToCreateMutex.lock();
+			prThumbnailToCreate.push_back(vFileInfos);
+			prThumbnailToCreateMutex.unlock();
 		}
 	}
 
-	void IGFD::ThumbnailFeature::prAddTextureToDestroy(std::shared_ptr<FileInfos> vFileInfos)
+	void IGFD::ThumbnailFeature::prAddThumbnailToDestroy(IGFD_Thumbnail_Info vIGFD_Thumbnail_Info)
 	{
-		if (vFileInfos.use_count())
-		{
-			// write => thread concurency issues
-			prTextureToDestroyMutex.lock();
-			prTextureToDestroy.push_back(vFileInfos);
-			prTextureToDestroyMutex.unlock();
-		}
+		// write => thread concurency issues
+		prThumbnailToDestroyMutex.lock();
+		prThumbnailToDestroy.push_back(vIGFD_Thumbnail_Info);
+		prThumbnailToDestroyMutex.unlock();
 	}
 
 	void IGFD::ThumbnailFeature::prDrawDisplayModeToolBar()
@@ -2137,63 +2133,75 @@ namespace IGFD
 		prDrawThumbnailGenerationProgress();
 	}
 
-	void IGFD::ThumbnailFeature::prClearThumbnails()
+	void IGFD::ThumbnailFeature::prClearThumbnails(FileDialogInternal& vFileDialogInternal)
 	{
-
-	}
-
-	void IGFD::ThumbnailFeature::SetCreateTextureCallback(const CreateTextureFun vCreateTextureFun)
-	{
-		prCreateTextureFun = vCreateTextureFun;
-	}
-
-	void IGFD::ThumbnailFeature::SetDestroyTextureCallback(const DestroyTextureFun vCreateTextureFun)
-	{
-		prDestroyTextureFun = vCreateTextureFun;
-	}
-
-	void IGFD::ThumbnailFeature::ManageGPUTextures()
-	{
-		if (prCreateTextureFun)
+		// directory wil be changed so the file list will be erased
+		if (vFileDialogInternal.puFileManager.puPathClicked)
 		{
-			if (!prTextureToCreate.empty())
+			size_t count = vFileDialogInternal.puFileManager.GetFullFileListSize();
+			for (size_t idx = 0U; idx < count; idx++)
 			{
-				for (auto file : prTextureToCreate)
+				auto file = vFileDialogInternal.puFileManager.GetFullFileAt(idx);
+				if (file.use_count())
+				{
+					if (file->thumbnailInfo.isReadyToDisplay)
+					{
+						prAddThumbnailToDestroy(file->thumbnailInfo);
+					}
+				}
+			}
+		}
+	}
+
+	void IGFD::ThumbnailFeature::SetCreateThumbnailCallback(const CreateThumbnailFun vCreateThumbnailFun)
+	{
+		prCreateThumbnailFun = vCreateThumbnailFun;
+	}
+
+	void IGFD::ThumbnailFeature::SetDestroyThumbnailCallback(const DestroyThumbnailFun vCreateThumbnailFun)
+	{
+		prDestroyThumbnailFun = vCreateThumbnailFun;
+	}
+
+	void IGFD::ThumbnailFeature::ManageGPUThumbnails()
+	{
+		if (prCreateThumbnailFun)
+		{
+			if (!prThumbnailToCreate.empty())
+			{
+				for (auto file : prThumbnailToCreate)
 				{
 					if (file.use_count())
 					{
-						prCreateTextureFun(&file->thumbnailInfo);
+						prCreateThumbnailFun(&file->thumbnailInfo);
 					}
 				}
-				prTextureToCreateMutex.lock();
-				prTextureToCreate.clear();
-				prTextureToCreateMutex.unlock();
+				prThumbnailToCreateMutex.lock();
+				prThumbnailToCreate.clear();
+				prThumbnailToCreateMutex.unlock();
 			}
 		}
 		else
 		{
-			printf("No Callback found for create texture\nYou need to define the callback with a call to SetCreateTextureCallback\n");
+			printf("No Callback found for create texture\nYou need to define the callback with a call to SetCreateThumbnailCallback\n");
 		}
 
-		if (prDestroyTextureFun)
+		if (prDestroyThumbnailFun)
 		{
-			if (!prTextureToDestroy.empty())
+			if (!prThumbnailToDestroy.empty())
 			{
-				for (auto file : prTextureToDestroy)
+				for (auto thumbnail : prThumbnailToDestroy)
 				{
-					if (file.use_count())
-					{
-						prDestroyTextureFun(&file->thumbnailInfo);
-					}
+					prDestroyThumbnailFun(&thumbnail);
 				}
-				prTextureToDestroyMutex.lock();
-				prTextureToDestroy.clear();
-				prTextureToDestroyMutex.unlock();
+				prThumbnailToDestroyMutex.lock();
+				prThumbnailToDestroy.clear();
+				prThumbnailToDestroyMutex.unlock();
 			}
 		}
 		else
 		{
-		printf("No Callback found for destroy texture\nYou need to define the callback with a call to SetCreateTextureCallback\n");
+		printf("No Callback found for destroy texture\nYou need to define the callback with a call to SetCreateThumbnailCallback\n");
 		}
 	}
 
@@ -3155,17 +3163,18 @@ namespace IGFD
 	void IGFD::FileDialog::NewFrame()
 	{
 		prFileDialogInternal.NewFrame();
-		NewThumbnailFrame();
+		NewThumbnailFrame(prFileDialogInternal);
 	}
 	
 	void IGFD::FileDialog::EndFrame()
 	{
+		EndThumbnailFrame(prFileDialogInternal);
 		prFileDialogInternal.EndFrame();
-		EndThumbnailFrame();
+		
 	}
 	void IGFD::FileDialog::QuitFrame()
 	{
-		QuitThumbnailFrame();
+		QuitThumbnailFrame(prFileDialogInternal);
 	}
 
 	void IGFD::FileDialog::prDrawHeader()
@@ -3650,7 +3659,7 @@ namespace IGFD
 						{
 							if (!infos->thumbnailInfo.isLoadingOrLoaded)
 							{
-								prAddTextureToLoad(infos);
+								prAddThumbnailToLoad(infos);
 							}
 							if (infos->thumbnailInfo.isReadyToDisplay && 
 								infos->thumbnailInfo.textureID)
@@ -4453,7 +4462,7 @@ IMGUIFILEDIALOG_API void SetCreateTextureCallback(ImGuiFileDialog* vContext, con
 {
 	if (vContext)
 	{
-		vContext->SetCreateTextureCallback(vCreateTextureFun);
+		vContext->SetCreateThumbnailCallback(vCreateTextureFun);
 	}
 }
 
@@ -4461,7 +4470,7 @@ IMGUIFILEDIALOG_API void SetDestroyTextureCallback(ImGuiFileDialog* vContext, co
 {
 	if (vContext)
 	{
-		vContext->SetDestroyTextureCallback(vCreateTextureFun);
+		vContext->SetDestroyThumbnailCallback(vCreateTextureFun);
 	}
 }
 #endif // USE_THUMBNAILS
