@@ -2803,12 +2803,14 @@ namespace IGFD
 
 		prFileDialogInternal.puFileManager.puDLGDirectoryMode = (vFilters == nullptr);
 		if (vPath.empty())
-			prFileDialogInternal.puFileManager.puDLGpath = ".";
+			prFileDialogInternal.puFileManager.puDLGpath = prFileDialogInternal.puFileManager.GetCurrentPath();
 		else
 			prFileDialogInternal.puFileManager.puDLGpath = vPath;
 		prFileDialogInternal.puFileManager.SetCurrentPath(vPath);
 		prFileDialogInternal.puFileManager.puDLGcountSelectionMax = vCountSelectionMax;
 		prFileDialogInternal.puFileManager.SetDefaultFileName(vFileName);
+
+		prFileDialogInternal.puFileManager.ClearAll();
 		
 		prFileDialogInternal.puShowDialog = true;					// open dialog
 	}
@@ -2845,7 +2847,7 @@ namespace IGFD
 		}
 		else
 		{
-			prFileDialogInternal.puFileManager.puDLGpath = ".";
+			prFileDialogInternal.puFileManager.puDLGpath = prFileDialogInternal.puFileManager.GetCurrentPath();
 			prFileDialogInternal.puFileManager.SetDefaultFileName("");
 			prFileDialogInternal.puFilterManager.puDLGdefaultExt.clear();
 		}
@@ -2858,6 +2860,8 @@ namespace IGFD
 
 		prFileDialogInternal.puFileManager.puDLGDirectoryMode = (vFilters == nullptr);
 		prFileDialogInternal.puFileManager.puDLGcountSelectionMax = vCountSelectionMax; //-V101
+
+		prFileDialogInternal.puFileManager.ClearAll();
 		
 		prFileDialogInternal.puShowDialog = true;
 	}
@@ -2895,13 +2899,15 @@ namespace IGFD
 		prFileDialogInternal.puFileManager.puDLGcountSelectionMax = vCountSelectionMax;
 		prFileDialogInternal.puFileManager.puDLGDirectoryMode = (vFilters == nullptr);
 		if (vPath.empty())
-			prFileDialogInternal.puFileManager.puDLGpath = ".";
+			prFileDialogInternal.puFileManager.puDLGpath = prFileDialogInternal.puFileManager.GetCurrentPath();
 		else
 			prFileDialogInternal.puFileManager.puDLGpath = vPath;
 
 		prFileDialogInternal.puFileManager.SetCurrentPath(prFileDialogInternal.puFileManager.puDLGpath);
 
 		prFileDialogInternal.puFileManager.SetDefaultFileName(vFileName);
+
+		prFileDialogInternal.puFileManager.ClearAll();
 		
 		prFileDialogInternal.puShowDialog = true;					// open dialog
 	}
@@ -2941,7 +2947,7 @@ namespace IGFD
 		}
 		else
 		{
-			prFileDialogInternal.puFileManager.puDLGpath = ".";
+			prFileDialogInternal.puFileManager.puDLGpath = prFileDialogInternal.puFileManager.GetCurrentPath();
 			prFileDialogInternal.puFileManager.SetDefaultFileName("");
 			prFileDialogInternal.puFilterManager.puDLGdefaultExt.clear();
 		}
@@ -2953,7 +2959,9 @@ namespace IGFD
 		prFileDialogInternal.puFilterManager.ParseFilters(vFilters);
 		prFileDialogInternal.puFilterManager.SetSelectedFilterWithExt(
 			prFileDialogInternal.puFilterManager.puDLGdefaultExt);
-		
+
+		prFileDialogInternal.puFileManager.ClearAll();
+
 		prFileDialogInternal.puShowDialog = true;
 	}
 
