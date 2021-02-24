@@ -88,7 +88,7 @@ void drawGui()
 	ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File", ".cpp,.h,.hpp", ".");
 
   // display
-  if (ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey"))
+  if (ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey"))
   {
 	// action if OK
 	if (ImGuiFileDialog::Instance()->IsOk == true)
@@ -98,7 +98,7 @@ void drawGui()
 	  // action
 	}
 	// close
-	ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey");
+	ImGuiFileDialog::Instance()->Close();
   }
 }
 
@@ -138,7 +138,7 @@ void drawGui()
 			".", "", std::bind(&InfosPane, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3), 350, 1, IGFD::UserDatas("InfosPane"));
 
   // display and action if ok
-  if (ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey"))
+  if (ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey"))
   {
 	if (ImGuiFileDialog::Instance()->IsOk == true)
 	{
@@ -154,7 +154,7 @@ void drawGui()
 		// action
 	}
 	// close
-	ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey");
+	ImGuiFileDialog::Instance()->Close();
   }
 }
 
@@ -228,7 +228,7 @@ by ex :
 Example code :
 ImVec2 maxSize = ImVec2((float)display_w, (float)display_h);
 ImVec2 minSize = maxSize * 0.5f;
-ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey", ImGuiWindowFlags_NoCollapse, minSize, maxSize);
+ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey", ImGuiWindowFlags_NoCollapse, minSize, maxSize);
 
 -----------------------------------------------------------------------------------------------------------------
 ## Detail View Mode
