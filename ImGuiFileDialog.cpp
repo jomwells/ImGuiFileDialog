@@ -3085,6 +3085,8 @@ namespace IGFD
 		auto& fdFile = prFileDialogInternal.puFileManager;
 		auto& fdFilter = prFileDialogInternal.puFilterManager;
 
+		static ImGuiWindowFlags flags;
+
 		if (prFileDialogInternal.puShowDialog && prFileDialogInternal.puDLGkey == vKey)
 		{
 			bool res = false;
@@ -3100,6 +3102,7 @@ namespace IGFD
 			{
 				fdFile.ClearComposer();
 				fdFile.ClearFileLists();
+				flags = vFlags;
 			}
 
 			NewFrame();
@@ -3112,14 +3115,28 @@ namespace IGFD
 			{
 				ImGui::OpenPopup(name.c_str());
 				beg = ImGui::BeginPopupModal(name.c_str(), (bool*)nullptr,
-					vFlags | ImGuiWindowFlags_NoScrollbar);
+					flags | ImGuiWindowFlags_NoScrollbar);
 			}
 			else
 			{
-				beg = ImGui::Begin(name.c_str(), (bool*)nullptr, vFlags | ImGuiWindowFlags_NoScrollbar);
+				beg = ImGui::Begin(name.c_str(), (bool*)nullptr, flags | ImGuiWindowFlags_NoScrollbar);
 			}
 			if (beg)
 			{
+				// if decoration is nebaled we disable the resizing fetaure of imgui for avoid crahs with SDL2 and GLFW3
+				if (ImGui::GetIO().ConfigViewportsNoDecoration)
+				{
+					flags = vFlags;
+				}
+				else
+				{
+					auto win = ImGui::GetCurrentWindowRead();
+					if (win->Viewport->Idx != 0)
+						flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
+					else
+						flags = vFlags;
+				}
+
 				prFileDialogInternal.puName = name; //-V820
 				puAnyWindowsHovered |= ImGui::IsWindowHovered();
 
