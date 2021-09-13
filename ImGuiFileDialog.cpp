@@ -1335,7 +1335,7 @@ namespace IGFD
 	{
 		ImGui::BeginChild("##FileDialog_FileList", vSize);
 
-		static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
+		static ImGuiTableFlags flags = ImGuiTableFlags_RowBg |
 			ImGuiTableFlags_Hideable | ImGuiTableFlags_ScrollY |
 			ImGuiTableFlags_NoHostExtendY
 #ifndef USE_CUSTOM_SORTING_ICON
