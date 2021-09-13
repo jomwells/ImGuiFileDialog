@@ -3107,6 +3107,14 @@ namespace IGFD
 
 			NewFrame();
 
+			if (!ImGui::GetIO().ConfigViewportsNoDecoration)
+			{
+				// https://github.com/ocornut/imgui/issues/4534
+				ImGuiWindowClass window_class;
+				window_class.ViewportFlagsOverrideClear = ImGuiViewportFlags_NoDecoration;
+				ImGui::SetNextWindowClass(&window_class);
+			}
+			
 			ImGui::SetNextWindowSizeConstraints(vMinSize, vMaxSize);
 
 			bool beg = false;
